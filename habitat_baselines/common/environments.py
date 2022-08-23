@@ -96,6 +96,7 @@ class NavRLEnv(habitat.RLEnv):
         self._previous_action = None
         super().__init__(self._core_env_config, dataset)
 
+
     def reset(self):
         self._previous_action = None
         observations = super().reset()
