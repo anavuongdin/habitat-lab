@@ -256,6 +256,16 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         config: configuration for initializing the simulator.
     """
 
+    def initialize_objects(self):
+        self.rigid_obj_mgr = self.get_rigid_object_manager()
+        self.obj_templates_mgr = self.get_object_template_manager()
+        self.clamp_template_id = self.obj_templates_mgr.load_configs(
+            "data/test_assets/objects/chair"
+        )[0]
+        self.clamp_obj = self.rigid_obj_mgr.add_object_by_template_id(self.clamp_template_id)
+        self.clamp_obj.motion_type = habitat_sim.physics.MotionType.KINEMATIC
+        self.clamp_obj.translation = self.agents[0].get_state().position + [0.0, 0.0, -5.0]
+
     def __init__(self, config: Config) -> None:
         self.habitat_config = config
         agent_config = self._get_agent_config()
