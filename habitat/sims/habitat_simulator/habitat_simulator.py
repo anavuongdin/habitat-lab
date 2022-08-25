@@ -3,7 +3,10 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import os
+import json
 
+from ast import Num
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -82,6 +85,29 @@ def overwrite_config(
                     If not the version of Habitat Sim may not be compatible with Habitat Lab version: {config_from}
                     """
                 )
+
+def extract_scene_id(scene_path: str):
+    return scene_path.split("/")[-1].split(".")[0], scene_path.split("/")[-3]
+
+
+class BotConfig:
+    def __init__(self, **kwargs):
+        self.bot_config_path = kwargs["bot_config_path"]
+        self.scene_id = kwargs["scene_id"]
+        self.prefix = kwargs["prefix"]
+    
+    @staticmethod
+    def add_suffix(file: str):
+        return file + ".json"
+
+    def get_bot_position(self):
+        scene_config = BotConfig.add_suffix(self.scene_id)
+        try:
+            with open(os.path.join(self.bot_config_path, self.prefix, scene_config)) as f:
+                return json.load(f)["position"]        
+        except:
+            raise("Invalid scene: {}, maybe the scene has not been configured properly.".format(self.scene_id))
+            exit()
 
 
 class HabitatSimSensor:
@@ -259,17 +285,32 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
     def initialize_objects(self):
         self.rigid_obj_mgr = self.get_rigid_object_manager()
         self.obj_templates_mgr = self.get_object_template_manager()
-        self.clamp_template_id = self.obj_templates_mgr.load_configs(
-            "data/test_assets/objects/chair"
-        )[0]
-        self.clamp_obj = self.rigid_obj_mgr.add_object_by_template_id(self.clamp_template_id)
-        self.clamp_obj.motion_type = habitat_sim.physics.MotionType.KINEMATIC
-        self.clamp_obj.translation = self.agents[0].get_state().position + [0.0, 0.0, -5.0]
+
+        # Initialize settings for bots
+        num_bots = self.habitat_config.NUMBER_OF_BOTS
+        self.bot_template_id = [None for _ in range(num_bots)]
+        self.bot_obj = [None for _ in range(num_bots)]
+
+        # Initialize configurations for bots
+        scene_id, prefix = extract_scene_id(self.habitat_config.SCENE)
+        bot_config = BotConfig(bot_config_path=self.habitat_config.BOT_CONFIG_PATH, scene_id=scene_id, prefix=prefix)
+        bot_position = bot_config.get_bot_position()
+
+        for idx in range(num_bots):
+            # Initialize for each bot
+            self.bot_template_id[idx] = self.obj_templates_mgr.load_configs(
+                self.habitat_config.BOT_PATH
+            )[0]
+            self.bot_obj[idx] = self.rigid_obj_mgr.add_object_by_template_id(self.bot_template_id[idx])
+            self.bot_obj[idx].motion_type = habitat_sim.physics.MotionType.DYNAMIC
+            self.bot_obj[idx].translation = self.agents[0].get_state().position + bot_position[idx]
+        
+        del bot_config
+        del bot_position
 
     def __init__(self, config: Config) -> None:
         self.habitat_config = config
         agent_config = self._get_agent_config()
-
         sim_sensors = []
         for sensor_name in agent_config.SENSORS:
             sensor_cfg = getattr(self.habitat_config, sensor_name)
@@ -293,6 +334,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             len(self.sim_config.agents[0].action_space)
         )
         self._prev_sim_obs: Optional[Observations] = None
+        self.initialize_objects()
 
     def create_sim_config(
         self, _sensor_suite: SensorSuite
