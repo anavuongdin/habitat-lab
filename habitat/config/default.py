@@ -111,7 +111,7 @@ _C.TASK.OBJECTGOAL_SENSOR.GOAL_SPEC_MAX_VAL = 50
 _C.TASK.IMAGEGOAL_SENSOR = CN()
 _C.TASK.IMAGEGOAL_SENSOR.TYPE = "ImageGoalSensor"
 # -----------------------------------------------------------------------------
-# CROWDGOAL SENSOR
+# CROWD SENSOR
 # -----------------------------------------------------------------------------
 _C.TASK.CROWD_SENSOR = CN()
 _C.TASK.CROWD_SENSOR.TYPE = "CrowdSensor"
@@ -258,6 +258,11 @@ SIMULATOR_DEPTH_SENSOR.NORMALIZE_DEPTH = True
 # -----------------------------------------------------------------------------
 _C.SIMULATOR.RGB_SENSOR = CAMERA_SIM_SENSOR.clone()
 _C.SIMULATOR.RGB_SENSOR.TYPE = "HabitatSimRGBSensor"
+# -----------------------------------------------------------------------------
+# CROWD SENSOR
+# -----------------------------------------------------------------------------
+_C.SIMULATOR.CROWD_SENSOR = CAMERA_SIM_SENSOR.clone()
+_C.SIMULATOR.CROWD_SENSOR.TYPE = "HabitatSimCrowdSensor"
 # -----------------------------------------------------------------------------
 # DEPTH SENSOR
 # -----------------------------------------------------------------------------

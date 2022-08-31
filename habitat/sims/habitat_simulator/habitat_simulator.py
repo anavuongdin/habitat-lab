@@ -36,6 +36,7 @@ from habitat.core.simulator import (
     DepthSensor,
     Observations,
     RGBSensor,
+    CrowdSensor,
     SemanticSensor,
     Sensor,
     SensorSuite,
@@ -148,6 +149,37 @@ class HabitatSimRGBSensor(RGBSensor, HabitatSimSensor):
         obs = obs[:, :, : self.RGBSENSOR_DIMENSION]  # type: ignore[index]
         return obs
 
+@registry.register_sensor
+class HabitatSimCrowdSensor(CrowdSensor, HabitatSimSensor):
+    _get_default_spec = habitat_sim.CameraSensorSpec
+    sim_sensor_type = habitat_sim.SensorType.SEMANTIC
+
+    CROWD_SENSOR_DIMENSION = 3
+
+    def __init__(self, config: Config) -> None:
+        super().__init__(config=config)
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any) -> Box:
+        return spaces.Box(
+            low=0,
+            high=255,
+            shape=(
+                self.config.HEIGHT,
+                self.config.WIDTH,
+                self.CROWD_SENSOR_DIMENSION,
+            ),
+            dtype=np.uint8,
+        )
+
+    def get_observation(
+        self, sim_obs: Dict[str, Union[np.ndarray, bool, "Tensor"]]
+    ) -> VisualObservation:
+        obs = cast(Optional[VisualObservation], sim_obs.get(self.uuid, None))
+        check_sim_obs(obs, self)
+
+        # remove alpha channel
+        obs = obs[:, :, : self.RGBSENSOR_DIMENSION]  # type: ignore[index]
+        return obs
 
 @registry.register_sensor
 class HabitatSimDepthSensor(DepthSensor, HabitatSimSensor):
