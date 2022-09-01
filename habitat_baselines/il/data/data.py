@@ -21,7 +21,7 @@ from habitat_baselines.utils.common import (
 )
 
 
-class EQADataset(wds.Dataset):
+class EQADataset(wds.WebDataset):
     """Pytorch dataset for Embodied Q&A (both VQA and PACMAN)"""
 
     def __init__(

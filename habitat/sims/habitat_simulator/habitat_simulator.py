@@ -24,8 +24,8 @@ import numpy as np
 from gym import spaces
 from gym.spaces.box import Box
 
-if TYPE_CHECKING:
-    from torch import Tensor
+# if TYPE_CHECKING:
+from torch import Tensor
 
 import habitat_sim
 from habitat.core.dataset import Episode
@@ -156,30 +156,22 @@ class HabitatSimCrowdSensor(CrowdSensor, HabitatSimSensor):
 
     CROWD_SENSOR_DIMENSION = 3
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, sim) -> None:
         super().__init__(config=config)
+        self._sim = sim
 
     def _get_observation_space(self, *args: Any, **kwargs: Any) -> Box:
         return spaces.Box(
             low=0,
             high=255,
-            shape=(
-                self.config.HEIGHT,
-                self.config.WIDTH,
-                self.CROWD_SENSOR_DIMENSION,
-            ),
-            dtype=np.uint8,
+            shape=(6, 3),
+            dtype=np.float32,
         )
 
     def get_observation(
         self, sim_obs: Dict[str, Union[np.ndarray, bool, "Tensor"]]
-    ) -> VisualObservation:
-        obs = cast(Optional[VisualObservation], sim_obs.get(self.uuid, None))
-        check_sim_obs(obs, self)
-
-        # remove alpha channel
-        obs = obs[:, :, : self.RGBSENSOR_DIMENSION]  # type: ignore[index]
-        return obs
+    ):
+        return self._sim._get_current_bot_locations()
 
 @registry.register_sensor
 class HabitatSimDepthSensor(DepthSensor, HabitatSimSensor):
@@ -351,7 +343,10 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             assert sensor_type is not None, "invalid sensor type {}".format(
                 sensor_cfg.TYPE
             )
-            sim_sensors.append(sensor_type(sensor_cfg))
+            if sensor_name == "CROWD_SENSOR":
+                sim_sensors.append(sensor_type(sensor_cfg, self))
+            else:
+                sim_sensors.append(sensor_type(sensor_cfg))
 
         self._sensor_suite = SensorSuite(sim_sensors)
         self.sim_config = self.create_sim_config(self._sensor_suite)
@@ -463,6 +458,9 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
                 is_updated = True
 
         return is_updated
+    
+    def _get_current_bot_locations(self):
+        return Tensor([self.bot_obj[idx].translation for idx in range(6)])
 
     def reset(self) -> Observations:
         sim_obs = super().reset()
@@ -475,6 +473,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
     def step(self, action: Union[str, np.ndarray, int]) -> Observations:
         sim_obs = super().step(action)
         self._prev_sim_obs = sim_obs
+
         observations = self._sensor_suite.get_observations(sim_obs)
         return observations
 

@@ -25,7 +25,7 @@ from habitat_baselines.utils.common import (
 cv2 = try_cv2_import()
 
 
-class NavDataset(wds.Dataset):
+class NavDataset(wds.WebDataset):
     """Pytorch dataset for PACMAN based navigation"""
 
     def __init__(
