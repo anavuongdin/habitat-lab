@@ -25,7 +25,6 @@ from habitat.core.registry import registry
 from habitat.core.simulator import (
     AgentState,
     RGBSensor,
-    CrowdSensor,
     Sensor,
     SensorTypes,
     ShortestPathPoint,
@@ -468,6 +467,40 @@ class EpisodicGPSSensor(Sensor):
         else:
             return agent_position.astype(np.float32)
 
+@registry.register_sensor(name="CrowdSensor")
+class CrowdSensor(Sensor):
+    cls_uuid: str = "crowd"
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return self.cls_uuid
+
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
+        self._sim = sim
+        self._dimensionality = 3
+        super().__init__(config=config)
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return self.cls_uuid
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.POSITION
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        sensor_shape = (self._dimensionality,)
+        return spaces.Box(
+            low=np.finfo(np.float32).min,
+            high=np.finfo(np.float32).max,
+            shape=(6, 3,),
+            dtype=np.float32,
+        )
+
+    def get_observation(
+        self, observations, episode, *args: Any, **kwargs: Any
+    ):
+        return self._sim._get_relative_bot_locations()
+
 
 @registry.register_sensor
 class ProximitySensor(Sensor):
@@ -491,52 +524,6 @@ class ProximitySensor(Sensor):
 
     def _get_sensor_type(self, *args: Any, **kwargs: Any):
         return SensorTypes.TACTILE
-
-    def _get_observation_space(self, *args: Any, **kwargs: Any):
-        return spaces.Box(
-            low=0.0,
-            high=self._max_detection_radius,
-            shape=(1,),
-            dtype=np.float32,
-        )
-
-    def get_observation(
-        self, observations, *args: Any, episode, **kwargs: Any
-    ):
-        current_position = self._sim.get_agent_state().position
-
-        return np.array(
-            [
-                self._sim.distance_to_closest_obstacle(
-                    current_position, self._max_detection_radius
-                )
-            ],
-            dtype=np.float32,
-        )
-
-
-@registry.register_sensor
-class CrowdSensor(Sensor):
-    r"""Sensor for observing the distance to the closest human entity
-
-    Args:
-        sim: reference to the simulator for calculating task observations.
-        config: config for the sensor.
-    """
-    cls_uuid: str = "crowd"
-
-    def __init__(self, sim, config, *args: Any, **kwargs: Any):
-        self._sim = sim
-        self._max_detection_radius = getattr(
-            config, "MAX_DETECTION_RADIUS", 2.0
-        )
-        super().__init__(config=config)
-
-    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
-        return self.cls_uuid
-
-    def _get_sensor_type(self, *args: Any, **kwargs: Any):
-        return SensorTypes.POSITION
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
         return spaces.Box(

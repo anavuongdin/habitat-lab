@@ -36,7 +36,6 @@ from habitat.core.simulator import (
     DepthSensor,
     Observations,
     RGBSensor,
-    CrowdSensor,
     SemanticSensor,
     Sensor,
     SensorSuite,
@@ -149,29 +148,6 @@ class HabitatSimRGBSensor(RGBSensor, HabitatSimSensor):
         obs = obs[:, :, : self.RGBSENSOR_DIMENSION]  # type: ignore[index]
         return obs
 
-@registry.register_sensor
-class HabitatSimCrowdSensor(CrowdSensor, HabitatSimSensor):
-    _get_default_spec = habitat_sim.CameraSensorSpec
-    sim_sensor_type = habitat_sim.SensorType.SEMANTIC
-
-    CROWD_SENSOR_DIMENSION = 3
-
-    def __init__(self, config: Config, sim) -> None:
-        super().__init__(config=config)
-        self._sim = sim
-
-    def _get_observation_space(self, *args: Any, **kwargs: Any) -> Box:
-        return spaces.Box(
-            low=0,
-            high=255,
-            shape=(6, 3),
-            dtype=np.float32,
-        )
-
-    def get_observation(
-        self, sim_obs: Dict[str, Union[np.ndarray, bool, "Tensor"]]
-    ):
-        return self._sim._get_current_bot_locations()
 
 @registry.register_sensor
 class HabitatSimDepthSensor(DepthSensor, HabitatSimSensor):
@@ -343,10 +319,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             assert sensor_type is not None, "invalid sensor type {}".format(
                 sensor_cfg.TYPE
             )
-            if sensor_name == "CROWD_SENSOR":
-                sim_sensors.append(sensor_type(sensor_cfg, self))
-            else:
-                sim_sensors.append(sensor_type(sensor_cfg))
+            sim_sensors.append(sensor_type(sensor_cfg))
 
         self._sensor_suite = SensorSuite(sim_sensors)
         self.sim_config = self.create_sim_config(self._sensor_suite)
@@ -460,7 +433,11 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         return is_updated
     
     def _get_current_bot_locations(self):
-        return Tensor([self.bot_obj[idx].translation for idx in range(6)])
+        # return np.array([self.bot_obj[idx].translation for idx in range(6)])
+        return np.array([[1, 2, 3] for idx in range(6)])
+    
+    def _get_relative_bot_locations(self):
+        return self._get_current_bot_locations() - self.agents[0].get_state().position
 
     def reset(self) -> Observations:
         sim_obs = super().reset()

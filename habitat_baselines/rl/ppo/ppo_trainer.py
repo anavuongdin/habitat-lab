@@ -311,7 +311,6 @@ class PPOTrainer(BaseRLTrainer):
         self.rollouts.to(self.device)
 
         observations = self.envs.reset()
-        print("JOKER: {}".format(len(observations)))
         batch = batch_obs(
             observations, device=self.device, cache=self._obs_batching_cache
         )

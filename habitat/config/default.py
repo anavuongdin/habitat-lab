@@ -259,11 +259,6 @@ SIMULATOR_DEPTH_SENSOR.NORMALIZE_DEPTH = True
 _C.SIMULATOR.RGB_SENSOR = CAMERA_SIM_SENSOR.clone()
 _C.SIMULATOR.RGB_SENSOR.TYPE = "HabitatSimRGBSensor"
 # -----------------------------------------------------------------------------
-# CROWD SENSOR
-# -----------------------------------------------------------------------------
-_C.SIMULATOR.CROWD_SENSOR = CAMERA_SIM_SENSOR.clone()
-_C.SIMULATOR.CROWD_SENSOR.TYPE = "HabitatSimCrowdSensor"
-# -----------------------------------------------------------------------------
 # DEPTH SENSOR
 # -----------------------------------------------------------------------------
 _C.SIMULATOR.DEPTH_SENSOR = CAMERA_SIM_SENSOR.clone()
