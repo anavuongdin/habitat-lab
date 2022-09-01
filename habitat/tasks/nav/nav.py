@@ -485,7 +485,7 @@ class CrowdSensor(Sensor):
         return self.cls_uuid
 
     def _get_sensor_type(self, *args: Any, **kwargs: Any):
-        return SensorTypes.POSITION
+        return SensorTypes.TACTILE
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
         sensor_shape = (self._dimensionality,)

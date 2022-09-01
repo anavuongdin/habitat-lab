@@ -282,7 +282,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         config: configuration for initializing the simulator.
     """
 
-    def initialize_objects(self):
+    def _initialize_bots(self):
         self.rigid_obj_mgr = self.get_rigid_object_manager()
         self.obj_templates_mgr = self.get_object_template_manager()
 
@@ -290,6 +290,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         num_bots = self.habitat_config.NUMBER_OF_BOTS
         self.bot_template_id = [None for _ in range(num_bots)]
         self.bot_obj = [None for _ in range(num_bots)]
+        self.vel_control = [None for _ in range(num_bots)]
 
         # Initialize configurations for bots
         scene_id, prefix = extract_scene_id(self.habitat_config.SCENE)
@@ -303,10 +304,19 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             )[0]
             self.bot_obj[idx] = self.rigid_obj_mgr.add_object_by_template_id(self.bot_template_id[idx])
             self.bot_obj[idx].motion_type = habitat_sim.physics.MotionType.DYNAMIC
+            self.vel_control[idx] = self.bot_obj[idx].velocity_control
+            self.vel_control[idx].linear_velocity = [0.00005, 0.0, 0.00005]
             self.bot_obj[idx].translation = self.agents[0].get_state().position + bot_position[idx]
         
         del bot_config
         del bot_position
+    
+    def _destroy_bots(self):
+        del self.rigid_obj_mgr
+        del self.obj_templates_mgr
+        del self.bot_template_id
+        del self.bot_obj
+        del self.vel_control
 
     def __init__(self, config: Config) -> None:
         self.habitat_config = config
@@ -334,7 +344,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             len(self.sim_config.agents[0].action_space)
         )
         self._prev_sim_obs: Optional[Observations] = None
-        self.initialize_objects()
+        self._initialize_bots()
 
     def create_sim_config(
         self, _sensor_suite: SensorSuite
@@ -433,8 +443,11 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         return is_updated
     
     def _get_current_bot_locations(self):
-        # return np.array([self.bot_obj[idx].translation for idx in range(6)])
-        return np.array([[1, 2, 3] for idx in range(6)])
+        try:
+            if self.bot_obj is not None:
+                return np.array([self.bot_obj[idx].translation for idx in range(6)])
+        except:
+            return np.ones((6,3))
     
     def _get_relative_bot_locations(self):
         return self._get_current_bot_locations() - self.agents[0].get_state().position
@@ -481,10 +494,12 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         self.habitat_config = habitat_config
         self.sim_config = self.create_sim_config(self._sensor_suite)
         if not is_same_scene:
+            self._destroy_bots()
             self._current_scene = habitat_config.SCENE
             self.close()
             super().reconfigure(self.sim_config)
-
+            self._initialize_bots()
+        
         self._update_agents_state()
 
     def geodesic_distance(
