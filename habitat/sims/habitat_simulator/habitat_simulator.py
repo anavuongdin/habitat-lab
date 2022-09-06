@@ -95,19 +95,34 @@ class BotConfig:
         self.bot_config_path = kwargs["bot_config_path"]
         self.scene_id = kwargs["scene_id"]
         self.prefix = kwargs["prefix"]
+        self.default_number_of_bots = kwargs["default_number_of_bots"]
+        self.config = None
     
     @staticmethod
     def add_suffix(file: str):
         return file + ".json"
 
     def get_bot_position(self):
+        return self._get_property("position")
+    
+    def get_number_of_bots(self):
+        try:
+            return self._get_property("number_of_bots")
+        except:
+            return self.default_number_of_bots
+    
+    def _get_property(self, property=None):
         scene_config = BotConfig.add_suffix(self.scene_id)
+        if self.config != None:
+            return self.config[property]
         try:
             with open(os.path.join(self.bot_config_path, self.prefix, scene_config)) as f:
-                return json.load(f)["position"]        
+                self.config = json.load(f)
+                return self.config[property]        
         except:
             raise("Invalid scene: {}, maybe the scene has not been configured properly.".format(self.scene_id))
             exit()
+
 
 
 class HabitatSimSensor:
@@ -294,8 +309,9 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
 
         # Initialize configurations for bots
         scene_id, prefix = extract_scene_id(self.habitat_config.SCENE)
-        bot_config = BotConfig(bot_config_path=self.habitat_config.BOT_CONFIG_PATH, scene_id=scene_id, prefix=prefix)
+        bot_config = BotConfig(bot_config_path=self.habitat_config.BOT_CONFIG_PATH, scene_id=scene_id, prefix=prefix, default_number_of_bots=num_bots)
         bot_position = bot_config.get_bot_position()
+        num_bots = bot_config.get_number_of_bots()
 
         for idx in range(num_bots):
             # Initialize for each bot
