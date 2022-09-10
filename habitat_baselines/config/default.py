@@ -153,9 +153,9 @@ _C.RL.PPO.use_double_buffered_sampler = False
 _C.RL.DDPPO = CN()
 _C.RL.DDPPO.sync_frac = 0.6
 _C.RL.DDPPO.distrib_backend = "GLOO"
-_C.RL.DDPPO.rnn_type = "GRU"
+_C.RL.DDPPO.rnn_type = "LSTM"
 _C.RL.DDPPO.num_recurrent_layers = 1
-_C.RL.DDPPO.backbone = "simplenet"
+_C.RL.DDPPO.backbone = "resnet18"
 _C.RL.DDPPO.pretrained_weights = "data/ddppo-models/gibson-2plus-resnet50.pth"
 # Loads pretrained weights
 _C.RL.DDPPO.pretrained = False

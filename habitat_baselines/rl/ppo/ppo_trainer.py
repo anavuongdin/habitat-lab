@@ -45,7 +45,7 @@ from habitat_baselines.rl.ddppo.ddp_utils import (
 )
 from habitat_baselines.rl.ddppo.policy import (  # noqa: F401.
     PointNavResNetPolicy,
-    SimplePolicy,
+    SRNNPolicy,
 )
 from habitat_baselines.rl.ppo import PPO
 from habitat_baselines.rl.ppo.policy import Policy
@@ -561,7 +561,7 @@ class PPOTrainer(BaseRLTrainer):
                 self.rollouts.current_rollout_step_idx
             ]
 
-            next_value, vae_loss = self.actor_critic.get_value(
+            next_value = self.actor_critic.get_value(
                 step_batch["observations"],
                 step_batch["recurrent_hidden_states"],
                 step_batch["prev_actions"],
@@ -585,7 +585,6 @@ class PPOTrainer(BaseRLTrainer):
             value_loss,
             action_loss,
             dist_entropy,
-            vae_loss,
         )
 
     def _coalesce_post_step(
@@ -831,7 +830,6 @@ class PPOTrainer(BaseRLTrainer):
                     value_loss,
                     action_loss,
                     dist_entropy,
-                    vae_loss
                 ) = self._update_agent()
 
                 if ppo_cfg.use_linear_lr_decay:
@@ -843,7 +841,6 @@ class PPOTrainer(BaseRLTrainer):
                         value_loss=value_loss,
                         action_loss=action_loss,
                         entropy=dist_entropy,
-                        vae_loss=vae_loss,
                     ),
                     count_steps_delta,
                 )

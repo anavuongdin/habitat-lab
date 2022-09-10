@@ -26,7 +26,7 @@ from habitat.tasks.nav.nav import (
 )
 from habitat.tasks.nav.object_nav_task import ObjectGoalSensor
 from habitat_baselines.common.baseline_registry import baseline_registry
-from habitat_baselines.rl.ddppo.policy import simplenet
+from habitat_baselines.rl.ddppo.policy import resnet
 from habitat_baselines.rl.ddppo.policy.running_mean_and_var import (
     RunningMeanAndVar,
 )
@@ -34,10 +34,13 @@ from habitat_baselines.rl.models.rnn_state_encoder import (
     build_rnn_state_encoder,
 )
 from habitat_baselines.rl.ppo import Net, Policy
+from habitat_baselines.rl.ddppo.policy.srnn import SRNN
+from habitat_baselines.rl.ddppo.policy.srnn_config import Config
+from habitat_baselines.rl.ddppo.policy.embedding import SpatialEdgesEmbedding, TemporalEdgesEmbedding, RobotNodeEmbedding
 
 
 @baseline_registry.register_policy
-class SimplePolicy(Policy):
+class SRNNPolicy(Policy):
     def __init__(
         self,
         observation_space: spaces.Dict,
@@ -46,7 +49,7 @@ class SimplePolicy(Policy):
         num_recurrent_layers: int = 1,
         rnn_type: str = "LSTM",
         resnet_baseplanes: int = 32,
-        backbone: str = "simplenet",
+        backbone: str = "resnet18",
         normalize_visual_inputs: bool = False,
         force_blind_policy: bool = False,
         policy_config: Config = None,
@@ -194,9 +197,9 @@ class SimpleEncoder(nn.Module):
         x = torch.cat(cnn_input, dim=1)
         x = F.avg_pool2d(x, 2)
         x = self.running_mean_and_var(x)
-        x, vae_loss = self.backbone(x)
+        x = self.backbone(x)
         x = self.compression(x)
-        return x, vae_loss
+        return x
 
 
 class SimpleNet(Net):
@@ -220,12 +223,19 @@ class SimpleNet(Net):
         discrete_actions: bool = True,
     ):
         super().__init__()
+        self.rnn_hxs = None
         self.prev_action_embedding: nn.Module
         self.discrete_actions = discrete_actions
         if discrete_actions:
             self.prev_action_embedding = nn.Embedding(action_space.n + 1, 32)
         else:
             self.prev_action_embedding = nn.Linear(action_space.n, 32)
+        
+        self.conf = Config()
+        self.spatial_edges_embedding = SpatialEdgesEmbedding()
+        self.temporal_edges_embedding = TemporalEdgesEmbedding()
+        self.robot_node_embedding = RobotNodeEmbedding()
+        self.SRNN = SRNN(None, self.conf)
 
         self._n_prev_action = 32
         rnn_input_size = self._n_prev_action
@@ -320,15 +330,19 @@ class SimpleNet(Net):
                 ),
                 nn.ReLU(True),
             )
-
             rnn_input_size += hidden_size
+
+        human_node_rnn_size = 6 * 1 * 128 // 4
+        human_human_edge_rnn_size = 6 * 6 * 256 // 4
+        self.masks = None
+        rnn_input_size += human_node_rnn_size + human_human_edge_rnn_size
 
         self._hidden_size = hidden_size
         self.visual_encoder = SimpleEncoder(
             observation_space if not force_blind_policy else spaces.Dict({}),
             baseplanes=resnet_baseplanes,
             ngroups=resnet_baseplanes // 2,
-            make_backbone=getattr(simplenet, backbone),
+            make_backbone=getattr(resnet, backbone),
             normalize_visual_inputs=normalize_visual_inputs,
         )
 
@@ -350,6 +364,12 @@ class SimpleNet(Net):
 
         self.train()
 
+    def _get_initial_rnn_hxs(self, device):
+        rnn_hxs = dict()
+        rnn_hxs['human_node_rnn'] = torch.rand((6, 1, 128)).to(device)
+        rnn_hxs['human_human_edge_rnn'] = torch.rand((6, 6, 256)).to(device)
+        return rnn_hxs
+
     @property
     def output_size(self):
         return self._hidden_size
@@ -370,13 +390,15 @@ class SimpleNet(Net):
         masks,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         x = []
+        inputs = dict()
         if not self.is_blind:
-            net_visual_feats, vae_loss = self.visual_encoder(observations)
+            net_visual_feats = self.visual_encoder(observations)
             visual_feats = observations.get(
                 "visual_features", net_visual_feats
             )
             visual_feats = self.visual_fc(visual_feats)
             x.append(visual_feats)
+            inputs['robot_node'] = self.robot_node_embedding(visual_feats)
 
         if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
             goal_observations = observations[
@@ -442,6 +464,8 @@ class SimpleNet(Net):
             size = crowd_tensor.data.shape[0]
             num_crowd_feats = crowd_tensor.data.shape[1] * crowd_tensor.data.shape[2]
             x.append(self.crowd_embedding(crowd_tensor.view(size, num_crowd_feats)).squeeze(dim=1))
+            inputs["spatial_edges"] = self.spatial_edges_embedding(crowd_tensor)
+            inputs_length = len(inputs["spatial_edges"])
 
         if EpisodicCompassSensor.cls_uuid in observations:
             compass_observations = torch.stack(
@@ -459,11 +483,34 @@ class SimpleNet(Net):
             x.append(
                 self.gps_embedding(observations[EpisodicGPSSensor.cls_uuid])
             )
+            inputs["temporal_edges"] = self.temporal_edges_embedding(observations[EpisodicGPSSensor.cls_uuid])
 
         if ImageGoalSensor.cls_uuid in observations:
             goal_image = observations[ImageGoalSensor.cls_uuid]
             goal_output = self.goal_visual_encoder({"rgb": goal_image})
             x.append(self.goal_visual_fc(goal_output))
+
+        device = observations[CrowdSensor.cls_uuid].device
+        if self.masks is None:
+            self.masks = torch.ones((180, 1)).to(device)
+        if self.rnn_hxs is None:
+            self.rnn_hxs = self._get_initial_rnn_hxs(device)
+        
+        hxs_node = []
+        hxs_human = []
+        for i in range(inputs_length):
+            _, __, self.rnn_hxs = self.SRNN(inputs["robot_node"][i],
+                                            inputs["temporal_edges"][i],
+                                            inputs["spatial_edges"][i],
+                                            self.rnn_hxs, 
+                                            self.masks)
+            hxs_node.append(self.rnn_hxs["human_node_rnn"].clone().detach())
+            hxs_human.append(self.rnn_hxs["human_human_edge_rnn"].clone().detach())
+        hxs_node  = torch.cat(hxs_node).view((4 * inputs_length), 192)
+        hxs_human  = torch.cat(hxs_human).view((4 * inputs_length), 2304)
+
+        x.append(hxs_node)
+        x.append(hxs_human)
 
         if self.discrete_actions:
             prev_actions = prev_actions.squeeze(-1)
@@ -482,5 +529,4 @@ class SimpleNet(Net):
         out, rnn_hidden_states = self.state_encoder(
             out, rnn_hidden_states, masks
         )
-        
-        return out, rnn_hidden_states, vae_loss
+        return out, rnn_hidden_states

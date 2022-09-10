@@ -68,7 +68,7 @@ class Policy(nn.Module, metaclass=abc.ABCMeta):
         masks,
         deterministic=False,
     ):
-        features, rnn_hidden_states, vae_loss = self.net(
+        features, rnn_hidden_states = self.net(
             observations, rnn_hidden_states, prev_actions, masks
         )
         distribution = self.action_distribution(features)
@@ -87,15 +87,15 @@ class Policy(nn.Module, metaclass=abc.ABCMeta):
         return value, action, action_log_probs, rnn_hidden_states
 
     def get_value(self, observations, rnn_hidden_states, prev_actions, masks):
-        features, _, vae_loss = self.net(
+        features, _ = self.net(
             observations, rnn_hidden_states, prev_actions, masks
         )
-        return self.critic(features), vae_loss
+        return self.critic(features)
 
     def evaluate_actions(
         self, observations, rnn_hidden_states, prev_actions, masks, action
     ):
-        features, rnn_hidden_states, vae_loss = self.net(
+        features, rnn_hidden_states = self.net(
             observations, rnn_hidden_states, prev_actions, masks
         )
         distribution = self.action_distribution(features)
