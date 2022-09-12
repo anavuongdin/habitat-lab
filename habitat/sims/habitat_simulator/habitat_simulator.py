@@ -721,4 +721,10 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             will _always_ be false after :meth:`reset` or :meth:`get_observations_at` as neither of those
             result in an action (step) being taken.
         """
-        return self._prev_sim_obs.get("collided", False)
+        # return self._prev_sim_obs.get("collided", False)
+        return self._is_collided_with_bots()
+    
+    def _is_collided_with_bots(self):
+        rel_bot_loc = self._get_relative_bot_locations()
+        dist = np.square(rel_bot_loc).sum(axis=1)
+        return dist[dist<self.habitat_config.COLLIDE_DIST].size > 0
