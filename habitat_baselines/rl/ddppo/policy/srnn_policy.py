@@ -398,6 +398,7 @@ class SimpleNet(Net):
             )
             visual_feats = self.visual_fc(visual_feats)
             x.append(visual_feats)
+            size =  int(visual_feats.data.shape[0])
             inputs['robot_node'] = self.robot_node_embedding(visual_feats)
 
         if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
@@ -508,6 +509,9 @@ class SimpleNet(Net):
             hxs_human.append(self.rnn_hxs["human_human_edge_rnn"].clone().detach())
         hxs_node  = torch.cat(hxs_node).view((4 * inputs_length), 192)
         hxs_human  = torch.cat(hxs_human).view((4 * inputs_length), 2304)
+        if size < 4:
+            hxs_node = hxs_node.narrow(0, 0, size * inputs_length)
+            hxs_human = hxs_human.narrow(0, 0, size * inputs_length)
 
         x.append(hxs_node)
         x.append(hxs_human)
@@ -525,7 +529,10 @@ class SimpleNet(Net):
 
         x.append(prev_actions)
 
-        out = torch.cat(x, dim=1)
+        try:
+            out = torch.cat(x, dim=1)
+        except:
+            print(x)
         out, rnn_hidden_states = self.state_encoder(
             out, rnn_hidden_states, masks
         )
