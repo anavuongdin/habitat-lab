@@ -214,7 +214,7 @@ def resnet18(in_channels, base_planes, ngroups):
 
     return model
 
-def simplenet(in_channels, base_planes, ngroups):
+def crowd_net(in_channels, base_planes, ngroups):
     model = VAENet(in_channels, base_planes, ngroups, BasicBlock, [1, 0, 0, 0])
 
     return model

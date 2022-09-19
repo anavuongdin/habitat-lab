@@ -155,7 +155,7 @@ _C.RL.DDPPO.sync_frac = 0.6
 _C.RL.DDPPO.distrib_backend = "GLOO"
 _C.RL.DDPPO.rnn_type = "GRU"
 _C.RL.DDPPO.num_recurrent_layers = 1
-_C.RL.DDPPO.backbone = "simplenet"
+_C.RL.DDPPO.backbone = "crowd_net"
 _C.RL.DDPPO.pretrained_weights = "data/ddppo-models/gibson-2plus-resnet50.pth"
 # Loads pretrained weights
 _C.RL.DDPPO.pretrained = False

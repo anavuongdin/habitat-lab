@@ -26,7 +26,7 @@ from habitat.tasks.nav.nav import (
 )
 from habitat.tasks.nav.object_nav_task import ObjectGoalSensor
 from habitat_baselines.common.baseline_registry import baseline_registry
-from habitat_baselines.rl.ddppo.policy import simplenet
+from habitat_baselines.rl.ddppo.policy import crowd_net
 from habitat_baselines.rl.ddppo.policy.running_mean_and_var import (
     RunningMeanAndVar,
 )
@@ -328,7 +328,7 @@ class SimpleNet(Net):
             observation_space if not force_blind_policy else spaces.Dict({}),
             baseplanes=resnet_baseplanes,
             ngroups=resnet_baseplanes // 2,
-            make_backbone=getattr(simplenet, backbone),
+            make_backbone=getattr(crowd_net, backbone),
             normalize_visual_inputs=normalize_visual_inputs,
         )
 
