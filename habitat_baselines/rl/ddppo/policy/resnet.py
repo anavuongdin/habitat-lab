@@ -275,10 +275,11 @@ class ResNet(nn.Module):
         x = cast(Tensor, x)
         x = self.layer1(x)
         x = self.layer2(x)
+        attention_embeds = x.clone()
         x = self.layer3(x)
         x = self.layer4(x)
 
-        return x
+        return x, attention_embeds
 
 
 def resnet18(in_channels, base_planes, ngroups):

@@ -7,6 +7,7 @@
 
 from typing import Dict, Tuple
 
+import copy
 import numpy as np
 import torch
 from gym import spaces
@@ -26,7 +27,7 @@ from habitat.tasks.nav.nav import (
 )
 from habitat.tasks.nav.object_nav_task import ObjectGoalSensor
 from habitat_baselines.common.baseline_registry import baseline_registry
-from habitat_baselines.rl.ddppo.policy import crowd_net
+from habitat_baselines.rl.ddppo.policy import resnet
 from habitat_baselines.rl.ddppo.policy.running_mean_and_var import (
     RunningMeanAndVar,
 )
@@ -34,10 +35,11 @@ from habitat_baselines.rl.models.rnn_state_encoder import (
     build_rnn_state_encoder,
 )
 from habitat_baselines.rl.ppo import Net, Policy
+from habitat_baselines.rl.ddppo.policy.crowd_attention import SelfPatchAttention, TransformerMemory, SeriesAttention, CrowdDynamicNet
 
 
 @baseline_registry.register_policy
-class SimplePolicy(Policy):
+class CrowdNetPolicy(Policy):
     def __init__(
         self,
         observation_space: spaces.Dict,
@@ -46,10 +48,13 @@ class SimplePolicy(Policy):
         num_recurrent_layers: int = 1,
         rnn_type: str = "LSTM",
         resnet_baseplanes: int = 32,
-        backbone: str = "simplenet",
+        backbone: str = "resnet18",
         normalize_visual_inputs: bool = False,
         force_blind_policy: bool = False,
         policy_config: Config = None,
+        num_environments: int = 4,
+        transformer_memory_size: int = 128,
+        pos_loss_fraction: float = 0.01,
         **kwargs
     ):
         if policy_config is not None:
@@ -63,7 +68,7 @@ class SimplePolicy(Policy):
             discrete_actions = True
             self.action_distribution_type = "categorical"
         super().__init__(
-            SimpleNet(
+            CrowdNet(
                 observation_space=observation_space,
                 action_space=action_space,  # for previous action
                 hidden_size=hidden_size,
@@ -74,10 +79,14 @@ class SimplePolicy(Policy):
                 normalize_visual_inputs=normalize_visual_inputs,
                 force_blind_policy=force_blind_policy,
                 discrete_actions=discrete_actions,
+                num_environments=num_environments,
+                transformer_memory_size=transformer_memory_size,
+                pos_loss_fraction=pos_loss_fraction,
             ),
             dim_actions=action_space.n,  # for action distribution
             policy_config=policy_config,
         )
+        self.num_environments = num_environments
 
     @classmethod
     def from_config(
@@ -93,10 +102,13 @@ class SimplePolicy(Policy):
             normalize_visual_inputs="rgb" in observation_space.spaces,
             force_blind_policy=config.FORCE_BLIND_POLICY,
             policy_config=config.RL.POLICY,
+            num_environments=config.NUM_ENVIRONMENTS,
+            transformer_memory_size=config.RL.DDPPO.transformer_memory_size,
+            pos_loss_fraction=config.RL.DDPPO.pos_loss_fraction,
         )
 
 
-class SimpleEncoder(nn.Module):
+class ResNetEncoder(nn.Module):
     def __init__(
         self,
         observation_space: spaces.Dict,
@@ -194,12 +206,12 @@ class SimpleEncoder(nn.Module):
         x = torch.cat(cnn_input, dim=1)
         x = F.avg_pool2d(x, 2)
         x = self.running_mean_and_var(x)
-        x, vae_loss = self.backbone(x)
+        x, attention_embeds = self.backbone(x)
         x = self.compression(x)
-        return x, vae_loss
+        return x, attention_embeds
 
 
-class SimpleNet(Net):
+class CrowdNet(Net):
     """Network which passes the input image through CNN and concatenates
     goal vector with CNN's output and passes that through RNN.
     """
@@ -218,6 +230,9 @@ class SimpleNet(Net):
         normalize_visual_inputs: bool,
         force_blind_policy: bool = False,
         discrete_actions: bool = True,
+        num_environments: int = 4,
+        transformer_memory_size: int = 128,
+        pos_loss_fraction: float = 0.01,
     ):
         super().__init__()
         self.prev_action_embedding: nn.Module
@@ -227,6 +242,13 @@ class SimpleNet(Net):
         else:
             self.prev_action_embedding = nn.Linear(action_space.n, 32)
 
+        self.patch_attention = SelfPatchAttention()
+        self.series_attention = SeriesAttention(transformer_memory_size)
+        self.crowd_dynamic_layer = CrowdDynamicNet(num_environments)
+        self.transformer_buffer = TransformerMemory(num_environments=num_environments, capacity=transformer_memory_size)
+        self.num_environments = num_environments
+        self.pos_loss_fraction = pos_loss_fraction
+        self.attn_hxs = None
         self._n_prev_action = 32
         rnn_input_size = self._n_prev_action
 
@@ -283,13 +305,6 @@ class SimpleNet(Net):
             self.proximity_embedding = nn.Linear(input_proximity_dim, 32)
             rnn_input_size += 32
 
-        if CrowdSensor.cls_uuid in observation_space.spaces:
-            crowd_dim = torch.prod(torch.tensor(observation_space.spaces[
-                CrowdSensor.cls_uuid
-            ].shape))
-            self.crowd_embedding = nn.Linear(crowd_dim, 32)
-            rnn_input_size += 32
-
         if EpisodicCompassSensor.cls_uuid in observation_space.spaces:
             assert (
                 observation_space.spaces[EpisodicCompassSensor.cls_uuid].shape[
@@ -305,11 +320,11 @@ class SimpleNet(Net):
             goal_observation_space = spaces.Dict(
                 {"rgb": observation_space.spaces[ImageGoalSensor.cls_uuid]}
             )
-            self.goal_visual_encoder = SimpleEncoder(
+            self.goal_visual_encoder = ResNetEncoder(
                 goal_observation_space,
                 baseplanes=resnet_baseplanes,
                 ngroups=resnet_baseplanes // 2,
-                make_backbone=getattr(simplenet, backbone),
+                make_backbone=getattr(resnet, backbone),
                 normalize_visual_inputs=normalize_visual_inputs,
             )
 
@@ -324,13 +339,15 @@ class SimpleNet(Net):
             rnn_input_size += hidden_size
 
         self._hidden_size = hidden_size
-        self.visual_encoder = SimpleEncoder(
+        self.visual_encoder = ResNetEncoder(
             observation_space if not force_blind_policy else spaces.Dict({}),
             baseplanes=resnet_baseplanes,
             ngroups=resnet_baseplanes // 2,
-            make_backbone=getattr(crowd_net, backbone),
+            make_backbone=getattr(resnet, backbone),
             normalize_visual_inputs=normalize_visual_inputs,
         )
+
+        rnn_input_size += self.patch_attention.output_size
 
         if not self.visual_encoder.is_blind:
             self.visual_fc = nn.Sequential(
@@ -362,6 +379,17 @@ class SimpleNet(Net):
     def num_recurrent_layers(self):
         return self.state_encoder.num_recurrent_layers
 
+    def _add_cls_tokens(self, memory):
+        tmp_memory = list(copy.copy(memory))
+        
+        DEFAULT_NUMBER_HUMANS = 6
+        for i in range(DEFAULT_NUMBER_HUMANS):
+            cls_token = torch.ones((tmp_memory[0].data.shape[0], tmp_memory[0].data.shape[1], tmp_memory[0].data.shape[2])).cuda() / (i+1)
+            tmp_memory.append(cls_token)
+
+        x = torch.cat(list(tmp_memory), dim=1)
+        return x
+
     def forward(
         self,
         observations: Dict[str, torch.Tensor],
@@ -371,7 +399,7 @@ class SimpleNet(Net):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         x = []
         if not self.is_blind:
-            net_visual_feats, vae_loss = self.visual_encoder(observations)
+            net_visual_feats, attention_embeds = self.visual_encoder(observations)
             visual_feats = observations.get(
                 "visual_features", net_visual_feats
             )
@@ -438,10 +466,9 @@ class SimpleNet(Net):
             x.append(self.obj_categories_embedding(object_goal).squeeze(dim=1))
         
         if CrowdSensor.cls_uuid in observations:
-            crowd_tensor = observations[CrowdSensor.cls_uuid]
-            size = crowd_tensor.data.shape[0]
-            num_crowd_feats = crowd_tensor.data.shape[1] * crowd_tensor.data.shape[2]
-            x.append(self.crowd_embedding(crowd_tensor.view(size, num_crowd_feats)).squeeze(dim=1))
+            truth_pos = observations[CrowdSensor.cls_uuid]
+            pos_loss, single_patch_attention = self._predict_pos(attention_embeds, truth_pos)        
+            x.append(single_patch_attention)
 
         if EpisodicCompassSensor.cls_uuid in observations:
             compass_observations = torch.stack(
@@ -483,4 +510,19 @@ class SimpleNet(Net):
             out, rnn_hidden_states, masks
         )
         
-        return out, rnn_hidden_states, vae_loss
+        return out, rnn_hidden_states, pos_loss
+
+    def _predict_pos(self, attention_embeds, truth_pos):
+        attention_embeds = attention_embeds.view((attention_embeds.data.shape[0], 
+                        attention_embeds.data.shape[1], attention_embeds.data \
+                        .shape[2] * attention_embeds.data.shape[3]))
+        single_patch_attention = self.patch_attention(attention_embeds)
+        self.transformer_buffer.push(single_patch_attention)
+        if self.transformer_buffer.full_flag:
+            patch_attentions = self._add_cls_tokens(self.transformer_buffer.sample())
+            series_attention = self.series_attention(patch_attentions)
+
+            predict_pos, self.attn_hxs = self.crowd_dynamic_layer(series_attention, self.attn_hxs)
+            return F.mse_loss(predict_pos, truth_pos) / self.pos_loss_fraction, single_patch_attention
+        else:
+            return 0, single_patch_attention
