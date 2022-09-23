@@ -57,7 +57,8 @@ class SelfPatchAttention(nn.Module):
     )
   
   def forward(self, x):
-    x = self.patch_attention(x.mT, x.mT)
+    x = torch.transpose(x, 1, 2)
+    x = self.patch_attention(x, x)
     x = self.reduction(x)
     
     return x
