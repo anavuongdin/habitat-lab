@@ -104,7 +104,7 @@ class Policy(nn.Module, metaclass=abc.ABCMeta):
         action_log_probs = distribution.log_probs(action)
         distribution_entropy = distribution.entropy()
 
-        return value, action_log_probs, distribution_entropy, rnn_hidden_states
+        return value, action_log_probs, distribution_entropy, rnn_hidden_states, vae_loss
 
     @classmethod
     @abc.abstractmethod

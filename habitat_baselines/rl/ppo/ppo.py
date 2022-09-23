@@ -88,6 +88,7 @@ class PPO(nn.Module):
                     action_log_probs,
                     dist_entropy,
                     _,
+                    vae_loss,
                 ) = self._evaluate_actions(
                     batch["observations"],
                     batch["recurrent_hidden_states"],
@@ -128,6 +129,7 @@ class PPO(nn.Module):
                     value_loss * self.value_loss_coef
                     + action_loss
                     - dist_entropy * self.entropy_coef
+                    + vae_loss * 0.0001
                 )
 
                 self.before_backward(total_loss)
