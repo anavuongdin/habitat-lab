@@ -333,6 +333,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         self.bot_template_id = [None for _ in range(self.default_num_bots)]
         self.bot_obj = [None for _ in range(self.default_num_bots)]
         self.vel_control = [None for _ in range(self.default_num_bots)]
+        self.starting_point = [None for _ in range(self.default_num_bots)]
 
         # Initialize configurations for bots
         scene_id, prefix = extract_scene_id(self.habitat_config.SCENE)
@@ -352,10 +353,17 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             self.vel_control[idx] = self.bot_obj[idx].velocity_control
             self.vel_control[idx].controlling_lin_vel = True
             self.vel_control[idx].controlling_ang_vel = True
+            self.starting_point[idx] = self.agents[0].get_state().position + bot_position[idx]
             self.bot_obj[idx].translation = self.agents[0].get_state().position + bot_position[idx]
 
         self._update_bot_vel(reset=True)
         del bot_position
+    
+    def _reset_position(self):
+        for idx in range(self.bot_config.num_bots):
+            self.bot_obj[idx].translation = self.starting_point[idx]
+        
+        self._update_bot_vel(reset=True)
 
     def _update_bot_vel(self, reset=False):
         if reset:
@@ -375,6 +383,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         del self.bot_obj
         del self.vel_control
         del self.bot_config
+        del self.starting_point
 
     def __init__(self, config: Config) -> None:
         self.habitat_config = config
@@ -518,7 +527,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
 
     def reset(self) -> Observations:
         sim_obs = super().reset()
-        self._update_bot_vel(reset=True)
+        self._reset_position()
         if self._update_agents_state():
             sim_obs = self.get_sensor_observations()
 
