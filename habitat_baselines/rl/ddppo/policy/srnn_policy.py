@@ -366,8 +366,8 @@ class SimpleNet(Net):
 
     def _get_initial_rnn_hxs(self, device):
         rnn_hxs = dict()
-        rnn_hxs['human_node_rnn'] = torch.rand((6, 1, 128)).to(device)
-        rnn_hxs['human_human_edge_rnn'] = torch.rand((6, 6, 256)).to(device)
+        rnn_hxs['human_node_rnn'] = torch.rand((6, 1, 128)).cuda()
+        rnn_hxs['human_human_edge_rnn'] = torch.rand((6, 6, 256)).cuda()
         return rnn_hxs
 
     @property
@@ -398,6 +398,7 @@ class SimpleNet(Net):
             )
             visual_feats = self.visual_fc(visual_feats)
             x.append(visual_feats)
+            nfirst_dimension = visual_feats.data.shape[0]
             size =  int(visual_feats.data.shape[0])
             inputs['robot_node'] = self.robot_node_embedding(visual_feats)
 
@@ -464,8 +465,8 @@ class SimpleNet(Net):
             crowd_tensor = observations[CrowdSensor.cls_uuid]
             size = crowd_tensor.data.shape[0]
             num_crowd_feats = crowd_tensor.data.shape[1] * crowd_tensor.data.shape[2]
-            x.append(self.crowd_embedding(crowd_tensor.view(size, num_crowd_feats)).squeeze(dim=1))
-            inputs["spatial_edges"] = self.spatial_edges_embedding(crowd_tensor)
+            x.append(self.crowd_embedding(crowd_tensor.view(size, num_crowd_feats).float()).squeeze(dim=1))
+            inputs["spatial_edges"] = self.spatial_edges_embedding(crowd_tensor.float())
             inputs_length = len(inputs["spatial_edges"])
 
         if EpisodicCompassSensor.cls_uuid in observations:
@@ -493,7 +494,7 @@ class SimpleNet(Net):
 
         device = observations[CrowdSensor.cls_uuid].device
         if self.masks is None:
-            self.masks = torch.ones((180, 1)).to(device)
+            self.masks = torch.ones((180, 1)).cuda()
         if self.rnn_hxs is None:
             self.rnn_hxs = self._get_initial_rnn_hxs(device)
         
@@ -509,9 +510,9 @@ class SimpleNet(Net):
             hxs_human.append(self.rnn_hxs["human_human_edge_rnn"].clone().detach())
         hxs_node  = torch.cat(hxs_node).view((4 * inputs_length), 192)
         hxs_human  = torch.cat(hxs_human).view((4 * inputs_length), 2304)
-        if size < 4:
-            hxs_node = hxs_node.narrow(0, 0, size * inputs_length)
-            hxs_human = hxs_human.narrow(0, 0, size * inputs_length)
+        # if size < 4:
+        hxs_node = hxs_node.narrow(0, 0, nfirst_dimension)
+        hxs_human = hxs_human.narrow(0, 0, nfirst_dimension)
 
         x.append(hxs_node)
         x.append(hxs_human)
@@ -532,7 +533,8 @@ class SimpleNet(Net):
         try:
             out = torch.cat(x, dim=1)
         except:
-            print(x)
+            for _x in x:
+                print(_x.data.shape)
         out, rnn_hidden_states = self.state_encoder(
             out, rnn_hidden_states, masks
         )
