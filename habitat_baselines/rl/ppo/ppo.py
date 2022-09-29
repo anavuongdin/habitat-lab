@@ -129,7 +129,7 @@ class PPO(nn.Module):
                     value_loss * self.value_loss_coef
                     + action_loss
                     - dist_entropy * self.entropy_coef
-                    + vae_loss * 0.0001
+                    + min(0.5, vae_loss * 1e-5)
                 )
 
                 self.before_backward(total_loss)

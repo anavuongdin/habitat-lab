@@ -441,7 +441,7 @@ class SimpleNet(Net):
             crowd_tensor = observations[CrowdSensor.cls_uuid]
             size = crowd_tensor.data.shape[0]
             num_crowd_feats = crowd_tensor.data.shape[1] * crowd_tensor.data.shape[2]
-            x.append(self.crowd_embedding(crowd_tensor.view(size, num_crowd_feats)).squeeze(dim=1))
+            x.append(self.crowd_embedding(crowd_tensor.view(size, num_crowd_feats).float()).squeeze(dim=1))
 
         if EpisodicCompassSensor.cls_uuid in observations:
             compass_observations = torch.stack(
