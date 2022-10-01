@@ -584,7 +584,8 @@ class Success(Measure):
         if (
             hasattr(task, "is_stop_called")
             and task.is_stop_called  # type: ignore
-            and distance_to_target < self._config.SUCCESS_DISTANCE
+            and distance_to_target < 2.0
+            # and distance_to_target < self._config.SUCCESS_DISTANCE
         ):
             self._metric = 1.0
         else:

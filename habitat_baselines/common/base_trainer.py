@@ -83,7 +83,6 @@ class BaseTrainer:
             if torch.cuda.is_available()
             else torch.device("cpu")
         )
-
         if "tensorboard" in self.config.VIDEO_OPTION:
             assert (
                 len(self.config.TENSORBOARD_DIR) > 0
