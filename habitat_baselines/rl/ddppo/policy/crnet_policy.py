@@ -143,30 +143,30 @@ class ResNetEncoder(nn.Module):
             input_channels = self._n_input_depth + self._n_input_rgb
             self.backbone = make_backbone(input_channels, baseplanes, ngroups)
 
-            final_spatial = int(
-                spatial_size * self.backbone.final_spatial_compress
-            )
-            after_compression_flat_size = 2048
-            num_compression_channels = int(
-                round(after_compression_flat_size / (final_spatial**2))
-            )
-            self.compression = nn.Sequential(
-                nn.Conv2d(
-                    self.backbone.final_channels,
-                    num_compression_channels,
-                    kernel_size=3,
-                    padding=1,
-                    bias=False,
-                ),
-                nn.GroupNorm(1, num_compression_channels),
-                nn.ReLU(True),
-            )
+            # final_spatial = int(
+            #     spatial_size * self.backbone.final_spatial_compress
+            # )
+            # after_compression_flat_size = 2048
+            # num_compression_channels = int(
+            #     round(after_compression_flat_size / (final_spatial**2))
+            # )
+            # self.compression = nn.Sequential(
+            #     nn.Conv2d(
+            #         self.backbone.final_channels,
+            #         num_compression_channels,
+            #         kernel_size=3,
+            #         padding=1,
+            #         bias=False,
+            #     ),
+            #     nn.GroupNorm(1, num_compression_channels),
+            #     nn.ReLU(True),
+            # )
 
-            self.output_shape = (
-                num_compression_channels,
-                final_spatial,
-                final_spatial,
-            )
+            # self.output_shape = (
+            #     num_compression_channels,
+            #     final_spatial,
+            #     final_spatial,
+            # )
 
     @property
     def is_blind(self):
@@ -206,9 +206,9 @@ class ResNetEncoder(nn.Module):
         x = torch.cat(cnn_input, dim=1)
         x = F.avg_pool2d(x, 2)
         x = self.running_mean_and_var(x)
-        x, attention_embeds = self.backbone(x)
-        x = self.compression(x)
-        return x, attention_embeds
+        x, attention_embeds, attention_matrix = self.backbone(x)
+        # x = self.compression(x)
+        return x, attention_embeds, attention_matrix 
 
 
 class CrowdNet(Net):
@@ -242,7 +242,7 @@ class CrowdNet(Net):
         else:
             self.prev_action_embedding = nn.Linear(action_space.n, 32)
 
-        self.patch_attention = SelfPatchAttention()
+        # self.patch_attention = SelfPatchAttention()
         self.series_attention = SeriesAttention(transformer_memory_size)
         self.crowd_dynamic_layer = CrowdDynamicNet(num_environments)
         self.transformer_buffer = TransformerMemory(num_environments=num_environments, capacity=transformer_memory_size)
@@ -347,24 +347,23 @@ class CrowdNet(Net):
             normalize_visual_inputs=normalize_visual_inputs,
         )
 
-        rnn_input_size += self.patch_attention.output_size
+        # rnn_input_size += self.patch_attention.output_size
 
         if not self.visual_encoder.is_blind:
             self.visual_fc = nn.Sequential(
                 nn.Flatten(),
-                nn.Linear(
-                    np.prod(self.visual_encoder.output_shape), hidden_size
-                ),
+                # nn.Linear(
+                #     np.prod(self.visual_encoder.output_shape), hidden_size
+                # ),
                 nn.ReLU(True),
             )
-
         self.state_encoder = build_rnn_state_encoder(
-            (0 if self.is_blind else self._hidden_size) + rnn_input_size,
+            (0 if self.is_blind else self._hidden_size * 2) + rnn_input_size,
             self._hidden_size,
             rnn_type=rnn_type,
             num_layers=num_recurrent_layers,
         )
-
+        
         self.train()
 
     @property
@@ -399,7 +398,7 @@ class CrowdNet(Net):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         x = []
         if not self.is_blind:
-            net_visual_feats, attention_embeds = self.visual_encoder(observations)
+            net_visual_feats, attention_embeds, _ = self.visual_encoder(observations)
             visual_feats = observations.get(
                 "visual_features", net_visual_feats
             )
@@ -467,7 +466,7 @@ class CrowdNet(Net):
         
         if CrowdSensor.cls_uuid in observations:
             truth_pos = observations[CrowdSensor.cls_uuid]
-            pos_loss, single_patch_attention = self._predict_pos(attention_embeds, truth_pos)        
+            pos_loss, single_patch_attention = self._predict_pos(net_visual_feats, truth_pos)        
             x.append(single_patch_attention)
 
         if EpisodicCompassSensor.cls_uuid in observations:
@@ -513,16 +512,16 @@ class CrowdNet(Net):
         return out, rnn_hidden_states, pos_loss
 
     def _predict_pos(self, attention_embeds, truth_pos):
-        attention_embeds = attention_embeds.view((attention_embeds.data.shape[0], 
-                        attention_embeds.data.shape[1], attention_embeds.data \
-                        .shape[2] * attention_embeds.data.shape[3]))
-        single_patch_attention = self.patch_attention(attention_embeds)
-        self.transformer_buffer.push(single_patch_attention)
+        # attention_embeds = attention_embeds.view((attention_embeds.data.shape[0], 
+        #                 attention_embeds.data.shape[1], attention_embeds.data \
+        #                 .shape[2] * attention_embeds.data.shape[3]))
+        # single_patch_attention = self.patch_attention(attention_embeds)
+        self.transformer_buffer.push(attention_embeds)
         if self.transformer_buffer.full_flag:
             patch_attentions = self._add_cls_tokens(self.transformer_buffer.sample())
             series_attention = self.series_attention(patch_attentions)
 
             predict_pos, self.attn_hxs = self.crowd_dynamic_layer(series_attention, self.attn_hxs)
-            return F.mse_loss(predict_pos, truth_pos) / self.pos_loss_fraction, single_patch_attention
+            return F.mse_loss(predict_pos, truth_pos) / self.pos_loss_fraction, attention_embeds
         else:
-            return 0, single_patch_attention
+            return 0, torch.flatten(attention_embeds, 1, -1)

@@ -67,16 +67,16 @@ class SeriesAttention(nn.Module):
   def __init__(self, transformer_memory_size):
     super().__init__()
     self.embed_layers = nn.Sequential(
-      nn.Linear(128, 32),
-      nn.GELU()
+      nn.Linear(512, 32),
+      nn.GELU(),
     )
-    self.series_attention = nn.Transformer(d_model=32, nhead=1, num_encoder_layers=1, num_decoder_layers=1, dim_feedforward=64)
+    self.flatten_layer = nn.Flatten()
+    self.series_attention = nn.Transformer(d_model=32, nhead=8, num_encoder_layers=4, num_decoder_layers=4, dim_feedforward=64)
 
   def forward(self, x):
     x = self.embed_layers(x)
     x = self.series_attention(x, x)
-    x = torch.narrow(x, 1, -DEFAULT_NUMBER_HUMANS , DEFAULT_NUMBER_HUMANS )
-
+    x = torch.narrow(x, 1, -DEFAULT_NUMBER_HUMANS , DEFAULT_NUMBER_HUMANS)
     return x
 
 class CrowdDynamicNet(nn.Module):
@@ -89,7 +89,6 @@ class CrowdDynamicNet(nn.Module):
     if hxs is None:
       hxs = self._init_hxs(device=x.device)
     
-    x = x.squeeze(dim=1)
     x, hxs = self.layer(x, hxs)
 
     return x, hxs
