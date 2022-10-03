@@ -66,14 +66,10 @@ class SelfPatchAttention(nn.Module):
 class SeriesAttention(nn.Module):
   def __init__(self, transformer_memory_size, is_series_attention):
     super().__init__()
-    self.embed_layers = nn.Sequential(
-      nn.Linear(512, 32),
-      nn.GELU(),
-    )
     self.flatten_layer = nn.Flatten()
     self._series_attention = is_series_attention
     if is_series_attention:
-      self.series_attention = nn.Transformer(d_model=32, nhead=8, num_encoder_layers=4, num_decoder_layers=4, dim_feedforward=64)
+      self.series_attention = nn.MultiheadAttention(512, 8)
     else:
       class CustomIndentity(nn.Module):
         def __init__(self):
@@ -86,16 +82,26 @@ class SeriesAttention(nn.Module):
       self.series_attention = CustomIndentity()
 
   def forward(self, x):
-    x = self.embed_layers(x)
-    x = self.series_attention(x, x)
-    x = torch.narrow(x, 1, -DEFAULT_NUMBER_HUMANS , DEFAULT_NUMBER_HUMANS)
-    return x
+    output = []
+    attention = []
+    for _x in x:
+      _x = _x.cuda()
+      attn_output, attn_output_weights = self.series_attention(_x, _x, _x)
+      attn_matrix = attn_output_weights
+      y = attn_matrix.narrow(0, -1, 1).narrow(1, 0, 32)
+      s = y.sum(-1)
+      output.append(attn_output.unsqueeze(0))
+      attention.append((y.T/s).T.unsqueeze(0))
+
+    output = torch.cat(output).narrow(1, -DEFAULT_NUMBER_HUMANS, DEFAULT_NUMBER_HUMANS)
+    attention = torch.cat(attention)
+    return output, attention
 
 class CrowdDynamicNet(nn.Module):
   def __init__(self, num_environments):
     super().__init__()
     self.num_environments = num_environments
-    self.layer = nn.GRU(input_size=32, hidden_size=3, num_layers=self.num_environments)
+    self.layer = nn.GRU(input_size=512, hidden_size=3, num_layers=self.num_environments)
   
   def forward(self, x, hxs=None):
     if hxs is None:

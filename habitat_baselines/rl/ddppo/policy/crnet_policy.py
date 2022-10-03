@@ -240,7 +240,7 @@ class CrowdNet(Net):
         discrete_actions: bool = True,
         num_environments: int = 4,
         transformer_memory_size: int = 128,
-        pos_loss_fraction: float = 0.01,
+        pos_loss_fraction: float = 0.001,
         is_patch_attention: bool = True,
         is_series_attention: bool = True,
     ):
@@ -412,12 +412,6 @@ class CrowdNet(Net):
             visual_feats = observations.get(
                 "visual_features", net_visual_feats
             )
-            # torch.save(observations['rgb'], './visualization/observations/rgb{}.pt'.format(self.counter))
-            # torch.save(observations['depth'], './visualization/observations/depth{}.pt'.format(self.counter))
-
-            self.counter += 1
-            # print("JOKER: ", observations['rgb'].data.shape, observations['depth'].data.shape)
-            # visualize(torch.concat([observations['rgb'], observations['depth']], dim=3), observations['rgb'], self.counter, self.visual_encoder.backbone)
             visual_feats = self.visual_fc(visual_feats)
             x.append(visual_feats)
 
@@ -482,7 +476,7 @@ class CrowdNet(Net):
         
         if CrowdSensor.cls_uuid in observations:
             truth_pos = observations[CrowdSensor.cls_uuid]
-            pos_loss, single_patch_attention = self._predict_pos(net_visual_feats, truth_pos)        
+            pos_loss, single_patch_attention, series_matrix = self._predict_pos(net_visual_feats, truth_pos)        
             x.append(single_patch_attention)
 
         if EpisodicCompassSensor.cls_uuid in observations:
@@ -517,7 +511,14 @@ class CrowdNet(Net):
             prev_actions = self.prev_action_embedding(
                 masks * prev_actions.float()
             )
-
+        # if self.counter < 50:
+        #     visualize(torch.concat([observations['rgb'], observations['depth']], dim=3), observations['rgb'], self.counter, self.visual_encoder.backbone)
+        #     save_series_matrix(series_matrix, self.counter)
+        
+        self.counter += 1
+        if self.counter >= 10000:
+            self.counter = 0
+    
         x.append(prev_actions)
 
         out = torch.cat(x, dim=1)
@@ -528,19 +529,22 @@ class CrowdNet(Net):
         return out, rnn_hidden_states, pos_loss
 
     def _predict_pos(self, attention_embeds, truth_pos):
-        # attention_embeds = attention_embeds.view((attention_embeds.data.shape[0], 
-        #                 attention_embeds.data.shape[1], attention_embeds.data \
-        #                 .shape[2] * attention_embeds.data.shape[3]))
-        # single_patch_attention = self.patch_attention(attention_embeds)
         self.transformer_buffer.push(attention_embeds)
         if self.transformer_buffer.full_flag:
             patch_attentions = self._add_cls_tokens(self.transformer_buffer.sample())
-            series_attention = self.series_attention(patch_attentions)
+            series_attention, series_matrix = self.series_attention(patch_attentions)
 
             predict_pos, self.attn_hxs = self.crowd_dynamic_layer(series_attention, self.attn_hxs)
-            return F.mse_loss(predict_pos, truth_pos) / self.pos_loss_fraction, attention_embeds
+            pos_loss = 0
+            for i in range(truth_pos.data.shape[0]):
+                for j in range(truth_pos.data.shape[1]):
+                    if (truth_pos[i][j] ** 2).sum() > 0.1:
+                        pos_loss += ((predict_pos[i][j] - truth_pos[i][j]) ** 2).sum()/3
+            if pos_loss < 1:
+                save_pos_prediction(predict_pos, truth_pos, self.counter)
+            return pos_loss * self.pos_loss_fraction, attention_embeds, series_matrix
         else:
-            return 0, torch.flatten(attention_embeds, 1, -1)
+            return 0, torch.flatten(attention_embeds, 1, -1), torch.zeros((4, 1, 32))
 
 
 def visualize(x, rgb, counter, model):
@@ -583,3 +587,10 @@ def visualize(x, rgb, counter, model):
   attention_img = Image.fromarray(result, "RGB")
   original_img.save("./visualization/original_images/original{}.png".format(counter))
   attention_img.save("./visualization/attention_images/attention{}.png".format(counter))
+
+def save_pos_prediction(predict_pos, truth_pos, counter):
+    torch.save(predict_pos, "./visualization/pos/predict{}.pt".format(counter))
+    torch.save(truth_pos, "./visualization/pos/truth{}.pt".format(counter))
+
+def save_series_matrix(series_matrix, counter):
+    torch.save(series_matrix, "./visualization/series/attn_matrix{}.pt".format(counter))
