@@ -40,9 +40,14 @@ class TransformerMemory(object):
 
 
 class SelfPatchAttention(nn.Module):
-  def __init__(self):
+  def __init__(self, is_patch_attention):
     super().__init__()
-    self.patch_attention = nn.Transformer(d_model=256, nhead=1, num_encoder_layers=1, num_decoder_layers=1, dim_feedforward=128)
+    self.is_patch_attention = is_patch_attention
+    if is_patch_attention:
+      self.patch_attention = nn.Transformer(d_model=256, nhead=1, num_encoder_layers=1, num_decoder_layers=1, dim_feedforward=128)
+    else:
+      self.patch_attention = nn.Identity()
+
     self.output_size = 128
     self.reduction = nn.Sequential(
       nn.Linear(256, 64),
@@ -58,23 +63,33 @@ class SelfPatchAttention(nn.Module):
   
   def forward(self, x):
     x = torch.transpose(x, 1, 2)
-    x = self.patch_attention(x, x)
+    if self.is_patch_attention:
+      x = self.patch_attention(x, x)
+    else:
+      x = self.patch_attention(x)
     x = self.reduction(x)
     
     return x
 
 class SeriesAttention(nn.Module):
-  def __init__(self, transformer_memory_size):
+  def __init__(self, transformer_memory_size, is_series_attention):
     super().__init__()
     self.embed_layers = nn.Sequential(
       nn.Linear(128, 32),
       nn.GELU()
     )
-    self.series_attention = nn.Transformer(d_model=32, nhead=1, num_encoder_layers=1, num_decoder_layers=1, dim_feedforward=64)
+    self.is_series_attention = is_series_attention
+    if self.is_series_attention:
+      self.series_attention = nn.Transformer(d_model=32, nhead=1, num_encoder_layers=1, num_decoder_layers=1, dim_feedforward=64)
+    else:
+      self.series_attention = nn.Identity()
 
   def forward(self, x):
     x = self.embed_layers(x)
-    x = self.series_attention(x, x)
+    if self.is_series_attention:
+      x = self.series_attention(x, x)
+    else:
+      x = self.series_attention(x)
     x = torch.narrow(x, 1, -DEFAULT_NUMBER_HUMANS , DEFAULT_NUMBER_HUMANS )
 
     return x

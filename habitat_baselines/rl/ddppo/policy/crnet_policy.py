@@ -82,6 +82,8 @@ class CrowdNetPolicy(Policy):
                 num_environments=num_environments,
                 transformer_memory_size=transformer_memory_size,
                 pos_loss_fraction=pos_loss_fraction,
+                is_patch_attention=kwargs["is_patch_attention"], 
+                is_series_attention=kwargs["is_series_attention"],
             ),
             dim_actions=action_space.n,  # for action distribution
             policy_config=policy_config,
@@ -90,7 +92,7 @@ class CrowdNetPolicy(Policy):
 
     @classmethod
     def from_config(
-        cls, config: Config, observation_space: spaces.Dict, action_space
+        cls, config: Config, observation_space: spaces.Dict, action_space, is_patch_attention, is_series_attention
     ):
         return cls(
             observation_space=observation_space,
@@ -105,6 +107,8 @@ class CrowdNetPolicy(Policy):
             num_environments=config.NUM_ENVIRONMENTS,
             transformer_memory_size=config.RL.DDPPO.transformer_memory_size,
             pos_loss_fraction=config.RL.DDPPO.pos_loss_fraction,
+            is_patch_attention=is_patch_attention, 
+            is_series_attention=is_series_attention,
         )
 
 
@@ -233,6 +237,8 @@ class CrowdNet(Net):
         num_environments: int = 4,
         transformer_memory_size: int = 128,
         pos_loss_fraction: float = 0.01,
+        is_patch_attention: bool = True,
+        is_series_attention: bool = True
     ):
         super().__init__()
         self.prev_action_embedding: nn.Module
@@ -242,8 +248,8 @@ class CrowdNet(Net):
         else:
             self.prev_action_embedding = nn.Linear(action_space.n, 32)
 
-        self.patch_attention = SelfPatchAttention()
-        self.series_attention = SeriesAttention(transformer_memory_size)
+        self.patch_attention = SelfPatchAttention(is_patch_attention)
+        self.series_attention = SeriesAttention(transformer_memory_size, is_series_attention)
         self.crowd_dynamic_layer = CrowdDynamicNet(num_environments)
         self.transformer_buffer = TransformerMemory(num_environments=num_environments, capacity=transformer_memory_size)
         self.num_environments = num_environments
