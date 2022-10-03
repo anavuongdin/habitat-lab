@@ -10,6 +10,7 @@ from torch import Tensor
 from torch import nn as nn
 from torch.nn.modules.container import Sequential
 from torch.nn.modules.conv import Conv2d
+import numpy as np
 
 from habitat_baselines.rl.ddppo.policy.vit_models.modeling import VisionTransformer
 
@@ -289,10 +290,12 @@ def resnet18(in_channels, base_planes, ngroups):
     return model
 
 
+def vit50(in_channels: int, base_planes: int, ngroups: int):
+    model = VisionTransformer(num_classes=512, zero_head=False, img_size=128, vis=True)
+    return model
+
 def resnet50(in_channels: int, base_planes: int, ngroups: int) -> ResNet:
     model = ResNet(in_channels, base_planes, ngroups, Bottleneck, [3, 4, 6, 3])
-    model = VisionTransformer(num_classes=512, zero_head=False, img_size=128, vis=True)
-
     return model
 
 

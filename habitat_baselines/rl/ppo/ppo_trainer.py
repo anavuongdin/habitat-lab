@@ -72,7 +72,7 @@ class PPOTrainer(BaseRLTrainer):
     agent: PPO
     actor_critic: Policy
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, is_patch_attention=True, is_series_attention=True):
         super().__init__(config)
         self.actor_critic = None
         self.agent = None
@@ -91,6 +91,8 @@ class PPOTrainer(BaseRLTrainer):
         self.using_velocity_ctrl = (
             self.config.TASK_CONFIG.TASK.POSSIBLE_ACTIONS
         ) == ["VELOCITY_CONTROL"]
+        self.is_patch_attention = is_patch_attention 
+        self.is_series_attention = is_series_attention
 
     @property
     def obs_space(self):
@@ -135,7 +137,7 @@ class PPOTrainer(BaseRLTrainer):
         )
 
         self.actor_critic = policy.from_config(
-            self.config, observation_space, self.policy_action_space
+            self.config, observation_space, self.policy_action_space, self.is_patch_attention, self.is_series_attention
         )
         self.obs_space = observation_space
         self.actor_critic.to(self.device)

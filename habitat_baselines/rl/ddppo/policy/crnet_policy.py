@@ -6,13 +6,17 @@
 
 
 from typing import Dict, Tuple
-
+import cv2 
 import copy
 import numpy as np
 import torch
 from gym import spaces
 from torch import nn as nn
 from torch.nn import functional as F
+import torchvision.transforms.functional as T
+import torchvision.transforms as transforms
+
+from PIL import Image
 
 from habitat.config import Config
 from habitat.tasks.nav.nav import (
@@ -82,6 +86,8 @@ class CrowdNetPolicy(Policy):
                 num_environments=num_environments,
                 transformer_memory_size=transformer_memory_size,
                 pos_loss_fraction=pos_loss_fraction,
+                is_patch_attention=kwargs["is_patch_attention"], 
+                is_series_attention=kwargs["is_series_attention"],
             ),
             dim_actions=action_space.n,  # for action distribution
             policy_config=policy_config,
@@ -90,7 +96,7 @@ class CrowdNetPolicy(Policy):
 
     @classmethod
     def from_config(
-        cls, config: Config, observation_space: spaces.Dict, action_space
+        cls, config: Config, observation_space: spaces.Dict, action_space, is_patch_attention, is_series_attention
     ):
         return cls(
             observation_space=observation_space,
@@ -105,6 +111,8 @@ class CrowdNetPolicy(Policy):
             num_environments=config.NUM_ENVIRONMENTS,
             transformer_memory_size=config.RL.DDPPO.transformer_memory_size,
             pos_loss_fraction=config.RL.DDPPO.pos_loss_fraction,
+            is_patch_attention=is_patch_attention, 
+            is_series_attention=is_series_attention,
         )
 
 
@@ -233,6 +241,8 @@ class CrowdNet(Net):
         num_environments: int = 4,
         transformer_memory_size: int = 128,
         pos_loss_fraction: float = 0.01,
+        is_patch_attention: bool = True,
+        is_series_attention: bool = True,
     ):
         super().__init__()
         self.prev_action_embedding: nn.Module
@@ -243,7 +253,7 @@ class CrowdNet(Net):
             self.prev_action_embedding = nn.Linear(action_space.n, 32)
 
         # self.patch_attention = SelfPatchAttention()
-        self.series_attention = SeriesAttention(transformer_memory_size)
+        self.series_attention = SeriesAttention(transformer_memory_size, is_series_attention)
         self.crowd_dynamic_layer = CrowdDynamicNet(num_environments)
         self.transformer_buffer = TransformerMemory(num_environments=num_environments, capacity=transformer_memory_size)
         self.num_environments = num_environments
@@ -324,7 +334,7 @@ class CrowdNet(Net):
                 goal_observation_space,
                 baseplanes=resnet_baseplanes,
                 ngroups=resnet_baseplanes // 2,
-                make_backbone=getattr(resnet, backbone),
+                make_backbone=getattr(resnet, "vit50"),
                 normalize_visual_inputs=normalize_visual_inputs,
             )
 
@@ -343,7 +353,7 @@ class CrowdNet(Net):
             observation_space if not force_blind_policy else spaces.Dict({}),
             baseplanes=resnet_baseplanes,
             ngroups=resnet_baseplanes // 2,
-            make_backbone=getattr(resnet, backbone),
+            make_backbone=getattr(resnet, "vit50"),
             normalize_visual_inputs=normalize_visual_inputs,
         )
 
@@ -363,7 +373,7 @@ class CrowdNet(Net):
             rnn_type=rnn_type,
             num_layers=num_recurrent_layers,
         )
-        
+        self.counter = 0
         self.train()
 
     @property
@@ -402,6 +412,12 @@ class CrowdNet(Net):
             visual_feats = observations.get(
                 "visual_features", net_visual_feats
             )
+            # torch.save(observations['rgb'], './visualization/observations/rgb{}.pt'.format(self.counter))
+            # torch.save(observations['depth'], './visualization/observations/depth{}.pt'.format(self.counter))
+
+            self.counter += 1
+            # print("JOKER: ", observations['rgb'].data.shape, observations['depth'].data.shape)
+            # visualize(torch.concat([observations['rgb'], observations['depth']], dim=3), observations['rgb'], self.counter, self.visual_encoder.backbone)
             visual_feats = self.visual_fc(visual_feats)
             x.append(visual_feats)
 
@@ -525,3 +541,45 @@ class CrowdNet(Net):
             return F.mse_loss(predict_pos, truth_pos) / self.pos_loss_fraction, attention_embeds
         else:
             return 0, torch.flatten(attention_embeds, 1, -1)
+
+
+def visualize(x, rgb, counter, model):
+  x = x[0]
+  rgb = rgb[0]
+  transform = transforms.Compose([
+    transforms.Resize((128, 128)),
+    transforms.ToTensor(),
+  ])
+  im = Image.fromarray(x.cpu().numpy(), "RGBA")
+  im_rgb = Image.fromarray(rgb.cpu().numpy(), "RGB")
+  x = transform(im).cuda()
+  rgb = transform(im_rgb).cuda()
+  logits, _, att_mat = model(x.unsqueeze(0))
+  att_mat = torch.stack(att_mat).squeeze(1)
+
+
+  # Average the attention weights across all heads.
+  att_mat = torch.mean(att_mat, dim=1)
+
+  # To account for residual connections, we add an identity matrix to the
+  # attention matrix and re-normalize the weights.
+  residual_att = torch.eye(att_mat.size(1)).cuda()
+  aug_att_mat = att_mat + residual_att
+  aug_att_mat = aug_att_mat / aug_att_mat.sum(dim=-1).unsqueeze(-1)
+
+  # Recursively multiply the weight matrices
+  joint_attentions = torch.zeros(aug_att_mat.size()).cuda()
+  joint_attentions[0] = aug_att_mat[0]
+
+  for n in range(1, aug_att_mat.size(0)):
+      joint_attentions[n] = torch.matmul(aug_att_mat[n], joint_attentions[n-1])
+  # Attention from the output token to the input space.
+  v = joint_attentions[-1]
+  grid_size = int(np.sqrt(aug_att_mat.size(-1)))
+  mask = v[0, 1:].reshape(grid_size, grid_size).detach().cpu().numpy()
+  mask = cv2.resize(mask / mask.max(), im_rgb.size)[..., np.newaxis]
+  result = (mask * im_rgb).astype("uint8")
+  original_img = im_rgb
+  attention_img = Image.fromarray(result, "RGB")
+  original_img.save("./visualization/original_images/original{}.png".format(counter))
+  attention_img.save("./visualization/attention_images/attention{}.png".format(counter))

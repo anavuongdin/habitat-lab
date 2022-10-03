@@ -64,14 +64,26 @@ class SelfPatchAttention(nn.Module):
     return x
 
 class SeriesAttention(nn.Module):
-  def __init__(self, transformer_memory_size):
+  def __init__(self, transformer_memory_size, is_series_attention):
     super().__init__()
     self.embed_layers = nn.Sequential(
       nn.Linear(512, 32),
       nn.GELU(),
     )
     self.flatten_layer = nn.Flatten()
-    self.series_attention = nn.Transformer(d_model=32, nhead=8, num_encoder_layers=4, num_decoder_layers=4, dim_feedforward=64)
+    self._series_attention = is_series_attention
+    if is_series_attention:
+      self.series_attention = nn.Transformer(d_model=32, nhead=8, num_encoder_layers=4, num_decoder_layers=4, dim_feedforward=64)
+    else:
+      class CustomIndentity(nn.Module):
+        def __init__(self):
+          super().__init__()
+          self.layer = nn.Identity()
+        
+        def forward(self, x, _):
+          return self.layer(x)
+      
+      self.series_attention = CustomIndentity()
 
   def forward(self, x):
     x = self.embed_layers(x)
