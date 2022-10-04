@@ -125,6 +125,7 @@ class ResNetEncoder(nn.Module):
         spatial_size: int = 128,
         make_backbone=None,
         normalize_visual_inputs: bool = False,
+        hidden_size: int=512,
     ):
         super().__init__()
 
@@ -149,7 +150,7 @@ class ResNetEncoder(nn.Module):
 
         if not self.is_blind:
             input_channels = self._n_input_depth + self._n_input_rgb
-            self.backbone = make_backbone(input_channels, baseplanes, ngroups)
+            self.backbone = make_backbone(hidden_size, input_channels, baseplanes, ngroups)
 
             # final_spatial = int(
             #     spatial_size * self.backbone.final_spatial_compress
@@ -253,8 +254,8 @@ class CrowdNet(Net):
             self.prev_action_embedding = nn.Linear(action_space.n, 32)
 
         # self.patch_attention = SelfPatchAttention()
-        self.series_attention = SeriesAttention(transformer_memory_size, is_series_attention)
-        self.crowd_dynamic_layer = CrowdDynamicNet(num_environments)
+        self.series_attention = SeriesAttention(transformer_memory_size, is_series_attention, hidden_size)
+        # self.crowd_dynamic_layer = CrowdDynamicNet(num_environments)
         self.transformer_buffer = TransformerMemory(num_environments=num_environments, capacity=transformer_memory_size)
         self.num_environments = num_environments
         self.pos_loss_fraction = pos_loss_fraction
@@ -336,6 +337,7 @@ class CrowdNet(Net):
                 ngroups=resnet_baseplanes // 2,
                 make_backbone=getattr(resnet, "vit50"),
                 normalize_visual_inputs=normalize_visual_inputs,
+                hidden_size=hidden_size
             )
 
             self.goal_visual_fc = nn.Sequential(
@@ -391,9 +393,9 @@ class CrowdNet(Net):
     def _add_cls_tokens(self, memory):
         tmp_memory = list(copy.copy(memory))
         
-        DEFAULT_NUMBER_HUMANS = 6
+        DEFAULT_NUMBER_HUMANS = 1
         for i in range(DEFAULT_NUMBER_HUMANS):
-            cls_token = torch.ones((tmp_memory[0].data.shape[0], tmp_memory[0].data.shape[1], tmp_memory[0].data.shape[2])).cuda() / (i+1)
+            cls_token = torch.zeros((tmp_memory[0].data.shape[0], tmp_memory[0].data.shape[1], tmp_memory[0].data.shape[2])).cuda()
             tmp_memory.append(cls_token)
 
         x = torch.cat(list(tmp_memory), dim=1)
@@ -413,6 +415,7 @@ class CrowdNet(Net):
                 "visual_features", net_visual_feats
             )
             visual_feats = self.visual_fc(visual_feats)
+            first_channel = visual_feats.data.shape[0]
             x.append(visual_feats)
 
         if IntegratedPointGoalGPSAndCompassSensor.cls_uuid in observations:
@@ -476,8 +479,10 @@ class CrowdNet(Net):
         
         if CrowdSensor.cls_uuid in observations:
             truth_pos = observations[CrowdSensor.cls_uuid]
-            pos_loss, single_patch_attention, series_matrix = self._predict_pos(net_visual_feats, truth_pos)        
-            x.append(single_patch_attention)
+            self.transformer_buffer.push(net_visual_feats)
+            patch_attentions = self._add_cls_tokens(self.transformer_buffer.sample())
+            series_output, series_matrix = self.series_attention(patch_attentions) 
+            x.append(series_output)
 
         if EpisodicCompassSensor.cls_uuid in observations:
             compass_observations = torch.stack(
@@ -526,25 +531,28 @@ class CrowdNet(Net):
             out, rnn_hidden_states, masks
         )
         
-        return out, rnn_hidden_states, pos_loss
+        return out, rnn_hidden_states, 0
 
-    def _predict_pos(self, attention_embeds, truth_pos):
+    def _predict_pos(self, attention_embeds, truth_pos, first_channel):
         self.transformer_buffer.push(attention_embeds)
         if self.transformer_buffer.full_flag:
             patch_attentions = self._add_cls_tokens(self.transformer_buffer.sample())
             series_attention, series_matrix = self.series_attention(patch_attentions)
 
-            predict_pos, self.attn_hxs = self.crowd_dynamic_layer(series_attention, self.attn_hxs)
-            pos_loss = 0
-            for i in range(truth_pos.data.shape[0]):
-                for j in range(truth_pos.data.shape[1]):
-                    if (truth_pos[i][j] ** 2).sum() > 0.1:
-                        pos_loss += ((predict_pos[i][j] - truth_pos[i][j]) ** 2).sum()/3
-            if pos_loss < 1:
-                save_pos_prediction(predict_pos, truth_pos, self.counter)
-            return pos_loss * self.pos_loss_fraction, attention_embeds, series_matrix
+            # predict_pos, self.attn_hxs = self.crowd_dynamic_layer(series_attention, self.attn_hxs)
+            # pos_loss = 0
+            # for i in range(truth_pos.data.shape[0]):
+            #     for j in range(truth_pos.data.shape[1]):
+            #         if (truth_pos[i][j] ** 2).sum() > 0.1:
+            #             pos_loss += ((predict_pos[i][j] - truth_pos[i][j]) ** 2).sum()/3
+            # if pos_loss < 1:
+            #     save_pos_prediction(predict_pos, truth_pos, self.counter)
+            # return pos_loss * self.pos_loss_fraction, attention_embeds, series_matrix
+            return series_attention, series_matrix
         else:
-            return 0, torch.flatten(attention_embeds, 1, -1), torch.zeros((4, 1, 32))
+            out = torch.zeros((first_channel, self._hidden_size))
+
+            return torch.zeros((first_channel, self._hidden_size)).cuda(), 0
 
 
 def visualize(x, rgb, counter, model):

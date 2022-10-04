@@ -6,7 +6,7 @@ from collections import namedtuple, deque
 import copy
 
 PATCH_ATTENTION_SIZE = 4096
-DEFAULT_NUMBER_HUMANS = 6
+DEFAULT_NUMBER_HUMANS = 1
 
 class TransformerMemory(object):
 
@@ -64,12 +64,13 @@ class SelfPatchAttention(nn.Module):
     return x
 
 class SeriesAttention(nn.Module):
-  def __init__(self, transformer_memory_size, is_series_attention):
+  def __init__(self, transformer_memory_size, is_series_attention, hidden_size):
     super().__init__()
+    self.transformer_memory_size = transformer_memory_size
     self.flatten_layer = nn.Flatten()
     self._series_attention = is_series_attention
     if is_series_attention:
-      self.series_attention = nn.MultiheadAttention(512, 8)
+      self.series_attention = nn.MultiheadAttention(hidden_size, 16)
     else:
       class CustomIndentity(nn.Module):
         def __init__(self):
@@ -85,15 +86,15 @@ class SeriesAttention(nn.Module):
     output = []
     attention = []
     for _x in x:
-      _x = _x.cuda()
+      _x = _x.cuda().clone().detach()
       attn_output, attn_output_weights = self.series_attention(_x, _x, _x)
       attn_matrix = attn_output_weights
-      y = attn_matrix.narrow(0, -1, 1).narrow(1, 0, 32)
+      y = attn_matrix.narrow(0, -1, 1).narrow(1, 0, attn_matrix.data.shape[1]-1)
       s = y.sum(-1)
       output.append(attn_output.unsqueeze(0))
       attention.append((y.T/s).T.unsqueeze(0))
 
-    output = torch.cat(output).narrow(1, -DEFAULT_NUMBER_HUMANS, DEFAULT_NUMBER_HUMANS)
+    output = torch.cat(output).narrow(1, -DEFAULT_NUMBER_HUMANS, 1).squeeze(1)
     attention = torch.cat(attention)
     return output, attention
 
