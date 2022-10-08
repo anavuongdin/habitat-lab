@@ -261,7 +261,9 @@ class CrowdNet(Net):
         self.pos_loss_fraction = pos_loss_fraction
         self.attn_hxs = None
         self._n_prev_action = 32
+        self._is_series_attention = is_series_attention
         rnn_input_size = self._n_prev_action
+
 
         if (
             IntegratedPointGoalGPSAndCompassSensor.cls_uuid
@@ -351,6 +353,8 @@ class CrowdNet(Net):
             rnn_input_size += hidden_size
 
         self._hidden_size = hidden_size
+        if self._is_series_attention:
+            rnn_input_size += self._hidden_size
         self.visual_encoder = ResNetEncoder(
             observation_space if not force_blind_policy else spaces.Dict({}),
             baseplanes=resnet_baseplanes,
@@ -370,7 +374,7 @@ class CrowdNet(Net):
                 nn.ReLU(True),
             )
         self.state_encoder = build_rnn_state_encoder(
-            (0 if self.is_blind else self._hidden_size * 2) + rnn_input_size,
+            (0 if self.is_blind else self._hidden_size) + rnn_input_size,
             self._hidden_size,
             rnn_type=rnn_type,
             num_layers=num_recurrent_layers,
@@ -479,10 +483,11 @@ class CrowdNet(Net):
         
         if CrowdSensor.cls_uuid in observations:
             truth_pos = observations[CrowdSensor.cls_uuid]
-            self.transformer_buffer.push(net_visual_feats)
-            patch_attentions = self._add_cls_tokens(self.transformer_buffer.sample())
-            series_output, series_matrix = self.series_attention(patch_attentions) 
-            x.append(series_output)
+            if self._is_series_attention: 
+                self.transformer_buffer.push(net_visual_feats)
+                patch_attentions = self._add_cls_tokens(self.transformer_buffer.sample())
+                series_output, series_matrix = self.series_attention(patch_attentions)
+                x.append(series_output)
 
         if EpisodicCompassSensor.cls_uuid in observations:
             compass_observations = torch.stack(
