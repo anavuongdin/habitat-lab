@@ -168,7 +168,7 @@ _C.RL.DDPPO.reset_critic = True
 # Forces distributed mode for testing
 _C.RL.DDPPO.force_distributed = False
 # Transformer memory size
-_C.RL.DDPPO.transformer_memory_size = 32
+_C.RL.DDPPO.transformer_memory_size = 64
 _C.RL.DDPPO.pos_loss_fraction = 0.01
 # -----------------------------------------------------------------------------
 # ORBSLAM2 BASELINE
