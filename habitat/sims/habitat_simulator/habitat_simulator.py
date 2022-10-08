@@ -353,8 +353,8 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             self.vel_control[idx] = self.bot_obj[idx].velocity_control
             self.vel_control[idx].controlling_lin_vel = True
             self.vel_control[idx].controlling_ang_vel = True
-            self.starting_point[idx] = self.agents[0].get_state().position + bot_position[idx]
-            self.bot_obj[idx].translation = self.agents[0].get_state().position + bot_position[idx]
+            self.starting_point[idx] = bot_position[idx]
+            self.bot_obj[idx].translation = bot_position[idx]
 
         self._update_bot_vel(reset=True)
         del bot_position
