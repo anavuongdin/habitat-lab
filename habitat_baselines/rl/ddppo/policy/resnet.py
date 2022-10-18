@@ -291,7 +291,8 @@ def resnet18(in_channels, base_planes, ngroups):
 
 
 def vit50(hidden_size, in_channels: int, base_planes: int, ngroups: int):
-    model = VisionTransformer(num_classes=hidden_size, zero_head=False, img_size=128, vis=True)
+    model = VisionTransformer(num_classes=hidden_size, zero_head=False, img_size=224, vis=True)
+    model.load_from(np.load("habitat_baselines/rl/ddppo/policy/vit_models/attention_data/ViT-B_16-224.npz"))
     return model
 
 def resnet50(in_channels: int, base_planes: int, ngroups: int) -> ResNet:

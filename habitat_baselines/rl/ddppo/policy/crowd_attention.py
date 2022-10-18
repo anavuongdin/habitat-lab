@@ -70,7 +70,7 @@ class SeriesAttention(nn.Module):
     self.flatten_layer = nn.Flatten()
     self._series_attention = is_series_attention
     if is_series_attention:
-      self.series_attention = nn.MultiheadAttention(hidden_size, 16)
+      self.series_attention = nn.MultiheadAttention(hidden_size, 25)
     else:
       class CustomIndentity(nn.Module):
         def __init__(self):

@@ -48,7 +48,7 @@ class CrowdNetPolicy(Policy):
         self,
         observation_space: spaces.Dict,
         action_space,
-        hidden_size: int = 512,
+        hidden_size: int = 1000,
         num_recurrent_layers: int = 1,
         rnn_type: str = "LSTM",
         resnet_baseplanes: int = 32,
@@ -125,7 +125,7 @@ class ResNetEncoder(nn.Module):
         spatial_size: int = 128,
         make_backbone=None,
         normalize_visual_inputs: bool = False,
-        hidden_size: int=512,
+        hidden_size: int=1000,
     ):
         super().__init__()
 
@@ -150,6 +150,7 @@ class ResNetEncoder(nn.Module):
 
         if not self.is_blind:
             input_channels = self._n_input_depth + self._n_input_rgb
+            print("Hidden size: ", hidden_size)
             self.backbone = make_backbone(hidden_size, input_channels, baseplanes, ngroups)
 
             # final_spatial = int(
@@ -204,17 +205,18 @@ class ResNetEncoder(nn.Module):
             )  # normalize RGB
             cnn_input.append(rgb_observations)
 
-        if self._n_input_depth > 0:
-            depth_observations = observations["depth"]
+        # if self._n_input_depth > 0:
+        #     depth_observations = observations["depth"]
 
-            # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
-            depth_observations = depth_observations.permute(0, 3, 1, 2)
+        #     # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
+        #     depth_observations = depth_observations.permute(0, 3, 1, 2)
 
-            cnn_input.append(depth_observations)
+        #     cnn_input.append(depth_observations)
 
         x = torch.cat(cnn_input, dim=1)
-        x = F.avg_pool2d(x, 2)
-        x = self.running_mean_and_var(x)
+        x = F.interpolate(x, (224, 224))
+        # x = F.avg_pool2d(x, 2)
+        # x = self.running_mean_and_var(x)
         x, attention_embeds, attention_matrix = self.backbone(x)
         # x = self.compression(x)
         return x, attention_embeds, attention_matrix 
