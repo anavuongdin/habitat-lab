@@ -22,6 +22,7 @@ from habitat.tasks.nav.nav import (
     IntegratedPointGoalGPSAndCompassSensor,
     PointGoalSensor,
     ProximitySensor,
+    CrowdSensor,
 )
 from habitat.tasks.nav.object_nav_task import ObjectGoalSensor
 from habitat_baselines.common.baseline_registry import baseline_registry
@@ -283,6 +284,13 @@ class PointNavResNetNet(Net):
             ].shape[0]
             self.proximity_embedding = nn.Linear(input_proximity_dim, 32)
             rnn_input_size += 32
+        
+        if CrowdSensor.cls_uuid in observation_space.spaces:
+            crowd_dim = torch.prod(torch.tensor(observation_space.spaces[
+                CrowdSensor.cls_uuid
+            ].shape))
+            self.crowd_embedding = nn.Linear(crowd_dim, 32)
+            rnn_input_size += 32
 
         if EpisodicCompassSensor.cls_uuid in observation_space.spaces:
             assert (
@@ -452,6 +460,12 @@ class PointNavResNetNet(Net):
             goal_image = observations[ImageGoalSensor.cls_uuid]
             goal_output = self.goal_visual_encoder({"rgb": goal_image})
             x.append(self.goal_visual_fc(goal_output))
+        
+        if CrowdSensor.cls_uuid in observations:
+            crowd_tensor = observations[CrowdSensor.cls_uuid]
+            size = crowd_tensor.data.shape[0]
+            num_crowd_feats = crowd_tensor.data.shape[1] * crowd_tensor.data.shape[2]
+            x.append(self.crowd_embedding(crowd_tensor.view(size, num_crowd_feats).float()).squeeze(dim=1))
 
         if self.discrete_actions:
             prev_actions = prev_actions.squeeze(-1)
@@ -470,5 +484,4 @@ class PointNavResNetNet(Net):
         out, rnn_hidden_states = self.state_encoder(
             out, rnn_hidden_states, masks
         )
-
         return out, rnn_hidden_states
