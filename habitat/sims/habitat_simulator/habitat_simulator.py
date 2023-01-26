@@ -346,7 +346,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         for idx in range(num_bots):
             # Initialize for each bot
             self.bot_template_id[idx] = self.obj_templates_mgr.load_configs(
-                self.habitat_config.BOT_PATH + str(idx)
+                self.habitat_config.BOT_PATH + str(idx % 6)
             )[0]
             self.bot_obj[idx] = self.rigid_obj_mgr.add_object_by_template_id(self.bot_template_id[idx])
             self.bot_obj[idx].motion_type = habitat_sim.physics.MotionType.DYNAMIC
@@ -514,7 +514,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             if self.bot_obj is not None:
                 return np.array([self.bot_obj[idx].translation for idx in range(self.bot_config.num_bots)])
         except:
-            return np.ones((self.bot_config.num_bots,3))
+            return np.ones((self.bot_config.num_bots, 3))
     
     def _get_relative_bot_locations(self):
         absolute_bot_locations = self._get_current_bot_locations()
