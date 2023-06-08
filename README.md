@@ -1,20 +1,12 @@
 ## Table of contents
-   1. [Motivation](#motivation)
    1. [Installation](#installation)
    1. [Example](#example)
    1. [Documentation](#documentation)
-   1. [Docker Setup](#docker-setup)
    1. [Details](#details)
    1. [Data](#data)
    1. [Baselines](#baselines)
-   1. [License](#license)
    1. [Acknowledgments](#acknowledgments)
    1. [References](#references)
-
-## Motivation
-While there has been significant progress in the vision and language communities thanks to recent advances in deep representations, we believe there is a growing disconnect between ‘internet AI’ and embodied AI. The focus of the former is pattern recognition in images, videos, and text on datasets typically curated from the internet. The focus of the latter is to enable action by an embodied agent in an environment (e.g. a robot). This brings to the forefront issues of active perception, long-term planning, learning from interaction, and holding a dialog grounded in an environment.
-
-To this end, we aim to standardize the entire ‘software stack’ for training embodied agents – scanning the world and creating highly photorealistic 3D assets, developing the next generation of highly efficient and parallelizable simulators, specifying embodied AI tasks that enable us to benchmark scientific progress, and releasing modular high-level libraries to train and deploy embodied agents.
 
 ## Installation
 
@@ -130,16 +122,7 @@ To make things easier we expect `data` folder of particular structure or symlink
 ### Scenes datasets
 | Scenes models | Extract path | Archive size |
 | --- | --- | --- |
-| 🆕[ReplicaCAD](#ReplicaCAD) | `data/scene_datasets/replica_cad/configs/scenes/{scene}.scene_instance.json` | 123 MB |
 | 🆕[HM3D](#HM3D) | `data/scene_datasets/hm3d/{split}/00\d\d\d-{scene}/{scene}.basis.glb` | 130 GB |
-| [Gibson](#Gibson) | `data/scene_datasets/gibson/{scene}.glb` | 1.5 GB |
-| [MatterPort3D](#Matterport3D) | `data/scene_datasets/mp3d/{scene}/{scene}.glb` | 15 GB |
-
-#### 🆕ReplicaCAD
-Download [ReplicaCAD](https://aihabitat.org/datasets/replica_cad/) dataset using download utility:
-```
-python -m habitat_sim.utils.datasets_download --uids replica_cad_dataset
-```
 
 #### 🆕Habitat Matterport
 Download [HM3D](https://aihabitat.org/datasets/hm3d/) dataset using download utility and [instructions](https://github.com/facebookresearch/habitat-sim/blob/089f6a41474f5470ca10222197c23693eef3a001/datasets/HM3D.md):
@@ -147,51 +130,13 @@ Download [HM3D](https://aihabitat.org/datasets/hm3d/) dataset using download uti
 python -m habitat_sim.utils.datasets_download --username <api-token-id> --password <api-token-secret> --uids hm3d_minival
 ```
 
-#### Matterport3D
-The full Matterport3D (MP3D) dataset for use with Habitat can be downloaded using the official [Matterport3D](https://niessner.github.io/Matterport/) download script as follows: `python download_mp.py --task habitat -o data/scene_datasets/mp3d/`. You only need the habitat zip archive and not the entire Matterport3D dataset. Note that this download script requires python 2.7 to run. Extract the matterport data to `data/scene_datasets/mp3d`.
-
-#### Gibson
-Download the Habitat related Gibson dataset following the instructions [here](https://github.com/StanfordVL/GibsonEnv#database). After downloading extract the dataset to folder `habitat-lab/data/scene_datasets/gibson/` folder (this folder should contain the `.glb` files from Gibson).
-
-
-### Task datasets
-| Task | Scenes | Link | Extract path | Config to use | Archive size |
-| --- | --- | --- | --- | --- | --- |
-| 🆕[Rearrange Pick](https://arxiv.org/abs/2106.14405) | ReplicaCAD | [rearrange_pick_replica_cad_v0.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0.zip) | `data/datasets/rearrange_pick/replica_cad/v0/` |  [`datasets/rearrangpick/replica_cad.yaml`](configs/datasets/rearrangpick/replica_cad.yaml) | 11 MB |
-| [Point goal navigation](https://arxiv.org/abs/1807.06757) | Gibson | [pointnav_gibson_v1.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/pointnav/gibson/v1/pointnav_gibson_v1.zip) | `data/datasets/pointnav/gibson/v1/` |  [`datasets/pointnav/gibson.yaml`](configs/datasets/pointnav/gibson.yaml) | 385 MB |
-| 🆕[Point goal navigation](https://arxiv.org/abs/1807.06757) | Gibson 0+ (train) | [pointnav_gibson_0_plus_v1.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/pointnav/gibson/v1/pointnav_gibson_0_plus_v1.zip) | `data/datasets/pointnav/gibson/v1/` |  [`datasets/pointnav/gibson_0_plus.yaml`](configs/datasets/pointnav/gibson_0_plus.yaml) | 321 MB |
-| [Point goal navigation corresponding to Sim2LoCoBot experiment configuration](https://arxiv.org/abs/1912.06321) | Gibson | [pointnav_gibson_v2.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/pointnav/gibson/v2/pointnav_gibson_v2.zip) | `data/datasets/pointnav/gibson/v2/` |  [`datasets/pointnav/gibson_v2.yaml`](configs/datasets/pointnav/gibson_v2.yaml) | 274 MB |
-| [Point goal navigation](https://arxiv.org/abs/1807.06757) | MatterPort3D | [pointnav_mp3d_v1.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/pointnav/mp3d/v1/pointnav_mp3d_v1.zip) | `data/datasets/pointnav/mp3d/v1/` | [`datasets/pointnav/mp3d.yaml`](configs/datasets/pointnav/mp3d.yaml) | 400 MB |
-| 🆕[Point goal navigation](https://arxiv.org/abs/1807.06757) | HM3D | [pointnav_hm3d_v1.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/pointnav/hm3d/v1/pointnav_hm3d_v1.zip) | `data/datasets/pointnav/hm3d/v1/` |  [`datasets/pointnav/hm3d.yaml`](configs/datasets/pointnav/hm3d.yaml) | 992 MB |
-| [Object goal navigation](https://arxiv.org/abs/2006.13171) | MatterPort3D | [objectnav_mp3d_v1.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/objectnav/m3d/v1/objectnav_mp3d_v1.zip) | `data/datasets/objectnav/mp3d/v1/` | [`datasets/objectnav/mp3d.yaml`](configs/datasets/objectnav/mp3d.yaml) | 170 MB |
-| 🆕[Object goal navigation](https://arxiv.org/abs/2006.13171) | HM3D | [objectnav_hm3d_v1.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/objectnav/hm3d/v1/objectnav_hm3d_v1.zip) | `data/datasets/objectnav/hm3d/v1/` |  [`datasets/objectnav/hm3d.yaml`](configs/datasets/objetnav/hm3d.yaml) | 154 MB |
-| [Embodied Question Answering](https://embodiedqa.org/) | MatterPort3D | [eqa_mp3d_v1.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/eqa/mp3d/v1/eqa_mp3d_v1.zip) | `data/datasets/eqa/mp3d/v1/` | [`datasets/eqa/mp3d.yaml`](configs/datasets/eqa/mp3d.yaml) | 44 MB |
-| [Visual Language Navigation](https://bringmeaspoon.org/) | MatterPort3D | [vln_r2r_mp3d_v1.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/vln/mp3d/r2r/v1/vln_r2r_mp3d_v1.zip) | `data/datasets/vln/mp3d/r2r/v1` | [`datasets/vln/mp3d_r2r.yaml`](configs/datasets/vln/mp3d_r2r.yaml) | 2.7 MB |
-| [Image goal navigation](https://github.com/facebookresearch/habitat-lab/pull/333) | Gibson | [pointnav_gibson_v1.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/pointnav/gibson/v1/pointnav_gibson_v1.zip) | `data/datasets/pointnav/gibson/v1/` |  [`datasets/imagenav/gibson.yaml`](configs/datasets/imagenav/gibson.yaml) | 385 MB |
-| [Image goal navigation](https://github.com/facebookresearch/habitat-lab/pull/333) | MatterPort3D | [pointnav_mp3d_v1.zip](https://dl.fbaipublicfiles.com/habitat/data/datasets/pointnav/mp3d/v1/pointnav_mp3d_v1.zip) | `data/datasets/pointnav/mp3d/v1/` | [`datasets/imagenav/mp3d.yaml`](configs/datasets/imagenav/mp3d.yaml) | 400 MB |
-
 To use an episode dataset provide related config to the Env in [the example](#example) or use the config for [RL agent training](habitat_baselines/README.md#reinforcement-learning-rl).
 
 ## Baselines
 Habitat Lab includes reinforcement learning (via PPO) and classical SLAM based baselines. For running PPO training on sample data and more details refer [habitat_baselines/README.md](habitat_baselines/README.md).
 
-## Habitat-PyRobot
-Habitat Lab supports deployment of models on a physical robot through PyRobot (https://github.com/facebookresearch/pyrobot). Please install the python3 version of PyRobot and refer to `habitat.sims.pyrobot.pyrobot` for instructions. This functionality allows deployment of models across simulation and reality.
-
-## ROS-X-Habitat
-ROS-X-Habitat (https://github.com/ericchen321/ros_x_habitat) is a framework that bridges the AI Habitat platform (Habitat Lab + Habitat Sim) with other robotics resources via ROS. Compared with Habitat-PyRobot, ROS-X-Habitat places emphasis on 1) leveraging Habitat Sim v2's physics-based simulation capability and 2) allowing roboticists to access simulation assets from ROS. The work has also been made public as a [paper](https://arxiv.org/abs/2109.07703).
-
-Note that ROS-X-Habitat was developed, and is maintained by the Lab for Computational Intelligence at UBC; it has not yet been officially supported by the Habitat Lab team. Please refer to the framework's repository for docs and discussions.
-
 ## Acknowledgments
-The Habitat project would not have been possible without the support and contributions of many individuals. We would like to thank Dmytro Mishkin, Xinlei Chen, Georgia Gkioxari, Daniel Gordon, Leonidas Guibas, Saurabh Gupta, Or Litany, Marcus Rohrbach, Amanpreet Singh, Devendra Singh Chaplot, Yuandong Tian, and Yuxin Wu for many helpful conversations and guidance on the design and development of the Habitat platform.
-
-## License
-Habitat Lab is MIT licensed. See the [LICENSE file](habitat_baselines/LICENSE) for details.
-
-The trained models and the task datasets are considered data derived from the correspondent scene datasets.
-- Matterport3D based task datasets and trained models are distributed with [Matterport3D Terms of Use](http://kaldir.vc.in.tum.de/matterport/MP_TOS.pdf) and under [CC BY-NC-SA 3.0 US license](https://creativecommons.org/licenses/by-nc-sa/3.0/us/).
-- Gibson based task datasets, the code for generating such datasets, and trained models are distributed with [Gibson Terms of Use](https://storage.googleapis.com/gibson_material/Agreement%20GDS%2006-04-18.pdf) and under [CC BY-NC-SA 3.0 US license](https://creativecommons.org/licenses/by-nc-sa/3.0/us/).
+This is a forked and reduced version of Habitat. If you want to have more information, please visit [the original site](https://github.com/facebookresearch/habitat-lab).
 
 ## References
 1. 🆕[Habitat 2.0: Training Home Assistants to Rearrange their Habitat](https://arxiv.org/abs/2106.14405) Andrew Szot, Alex Clegg, Eric Undersander, Erik Wijmans, Yili Zhao, John Turner, Noah Maestre, Mustafa Mukadam, Devendra Chaplot, Oleksandr Maksymets, Aaron Gokaslan, Vladimir Vondrus, Sameer Dharur, Franziska Meier, Wojciech Galuba, Angel Chang, Zsolt Kira, Vladlen Koltun, Jitendra Malik, Manolis Savva, Dhruv Batra. Advances in Neural Information Processing Systems (NeurIPS), 2021.
