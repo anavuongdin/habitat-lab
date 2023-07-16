@@ -7,8 +7,7 @@ Clone the version from our forked github repository and install habitat-lab usin
     cd habitat-lab
     pip install -e .
     ```
-
-    The command above will install only core of Habitat Lab. To include habitat_baselines along with all additional requirements, use the command below instead:
+The command above will install only core of Habitat Lab. To include habitat_baselines along with all additional requirements, use the command below instead:
 
     ```bash
     git clone https://github.com/habicrowd/habitat-lab.git
