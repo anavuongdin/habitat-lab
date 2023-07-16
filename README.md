@@ -1,6 +1,6 @@
 ## Installation for HabiCrowd baselines
 
-1. Clone a stable version from the github repository and install habitat-lab using the commands below. Note that python>=3.7 is required for working with habitat-lab. All the development and testing was done using python3.7. Please use 3.7 to avoid possible issues.
+Clone a stable version from the github repository and install habitat-lab using the commands below. Note that python>=3.7 is required for working with habitat-lab. All the development and testing was done using python3.7. Please use 3.7 to avoid possible issues.
 
     ```bash
     git clone https://github.com/habicrowd/habitat-lab.git
